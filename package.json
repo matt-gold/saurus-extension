@@ -1,0 +1,190 @@
+{
+  "name": "saurus-extension",
+  "displayName": "Saurus Extension",
+  "description": "Placeholder replacement suggestions for creative writing via Codex CLI.",
+  "version": "0.1.8",
+  "icon": "assets/icon.png",
+  "publisher": "mattgold",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matt-gold/saurus-extension.git"
+  },
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:saurus.generateSuggestions",
+    "onCommand:saurus.suggestForSelection",
+    "onCommand:saurus.refreshSuggestions",
+    "onCommand:saurus.disableAutoTriggerForWorkspace",
+    "onLanguage:markdown",
+    "onLanguage:plaintext"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "saurus.generateSuggestions",
+        "title": "Saurus: Generate Placeholder Suggestions"
+      },
+      {
+        "command": "saurus.suggestForSelection",
+        "title": "Saurus: Suggest For Selected Text"
+      },
+      {
+        "command": "saurus.refreshSuggestions",
+        "title": "Saurus: Get Different Placeholder Options"
+      },
+      {
+        "command": "saurus.disableAutoTriggerForWorkspace",
+        "title": "Saurus: Disable Auto Trigger (Workspace)"
+      }
+    ],
+    "configuration": {
+      "title": "Saurus",
+      "properties": {
+        "saurus.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Saurus placeholder suggestions."
+        },
+        "saurus.languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "markdown",
+            "plaintext"
+          ],
+          "description": "Language IDs where Saurus is active."
+        },
+        "saurus.delimiters.open": {
+          "type": "string",
+          "default": "{{",
+          "description": "Opening placeholder delimiter."
+        },
+        "saurus.delimiters.close": {
+          "type": "string",
+          "default": "}}",
+          "description": "Closing placeholder delimiter."
+        },
+        "saurus.placeholderHighlight.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight placeholders in the editor so they are visually easy to spot."
+        },
+        "saurus.placeholderHighlight.backgroundColor": {
+          "type": "string",
+          "default": "rgba(56, 189, 248, 0.2)",
+          "description": "Background color for highlighted placeholders."
+        },
+        "saurus.placeholderHighlight.borderColor": {
+          "type": "string",
+          "default": "rgba(125, 211, 252, 0.65)",
+          "description": "Border color for highlighted placeholders."
+        },
+        "saurus.placeholderHighlight.delimiterColor": {
+          "type": "string",
+          "default": "#bae6fd",
+          "description": "Text color used for placeholder delimiters."
+        },
+        "saurus.placeholderHighlight.textColor": {
+          "type": "string",
+          "default": "#e0f2fe",
+          "description": "Text color used for placeholder content."
+        },
+        "saurus.prompt.template": {
+          "type": "string",
+          "scope": "window",
+          "default": "You are helping with literary prose revision. Provide ${suggestionCount} replacement options for the placeholder.\n\nReturn valid JSON only with this shape: {\\\"suggestions\\\":[\\\"...\\\"]}.\nKeep options concise and stylistically consistent with nearby prose.\nDo not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).\n\nPlaceholder text:\n${placeholder}\n\nContext before:\n${contextBefore}\n\nContext after:\n${contextAfter}\n\nAvoid suggestions:\n${avoidSuggestions}\n",
+          "description": "Prompt template used for Codex generation. Supports ${placeholder}, ${contextBefore}, ${contextAfter}, ${suggestionCount}, ${avoidSuggestions}, ${fileName}, ${languageId}."
+        },
+        "saurus.suggestions.count": {
+          "type": "number",
+          "default": 10,
+          "minimum": 2,
+          "maximum": 20,
+          "description": "Number of suggestion options to request."
+        },
+        "saurus.autoTrigger.onCursorEnter": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-generate suggestions when cursor enters a placeholder."
+        },
+        "saurus.autoTrigger.debounceMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 50,
+          "description": "Debounce delay for auto-trigger behavior."
+        },
+        "saurus.context.charsBefore": {
+          "type": "number",
+          "default": 220,
+          "minimum": 0,
+          "description": "Characters of context before placeholder to include in prompt."
+        },
+        "saurus.context.charsAfter": {
+          "type": "number",
+          "default": 140,
+          "minimum": 0,
+          "description": "Characters of context after placeholder to include in prompt."
+        },
+        "saurus.codex.path": {
+          "type": "string",
+          "default": "codex",
+          "description": "Path to codex CLI executable."
+        },
+        "saurus.codex.model": {
+          "type": "string",
+          "default": "gpt-5.3-codex",
+          "description": "Codex model to use for placeholder suggestions."
+        },
+        "saurus.codex.reasoningEffort": {
+          "type": "string",
+          "default": "low",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "description": "Codex reasoning effort. Lower effort is usually faster."
+        },
+        "saurus.codex.timeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 1000,
+          "description": "Timeout for codex CLI requests in milliseconds."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "saurus.suggestForSelection",
+        "mac": "cmd+shift+s",
+        "linux": "ctrl+shift+s",
+        "win": "ctrl+shift+s",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "test": "npm run compile && node --test out/test/**/*.test.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.92.0",
+    "@vscode/vsce": "^3.2.2",
+    "typescript": "^5.6.3"
+  }
+}
