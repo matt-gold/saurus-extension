@@ -7,10 +7,12 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
 ## Features
 
 - Configurable placeholder delimiters (default `{{` and `}}`)
-- Multiple replacement options in the normal completion UI
+- Thesaurus suggestions (Merriam-Webster) shown first and cached per placeholder context
+- AI suggestions via Codex, optionally auto-run or on-demand
+- Grouped source labeling in the completion UI (`📚 Thesaurus`, `🤖 AI`)
 - Auto-trigger when cursor enters a placeholder
 - Manual commands for generate and novelty refresh
-- In-popover action: `↻ Get different options`
+- In-popover action: `↻ Generate/Get more AI options`
 - Workspace-configurable prompt template
 - Cache with force refresh that avoids previously shown options
 - Color-coded placeholder highlighting in the editor
@@ -21,6 +23,7 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
 - Node.js 20+
 - Codex CLI installed and available on PATH (or configure `saurus.codex.path`)
 - Logged-in Codex CLI session
+- Merriam-Webster Thesaurus API key (`saurus.thesaurus.apiKey`)
 
 Check login:
 
@@ -57,21 +60,23 @@ This produces a `.vsix` you can install locally.
 1. Open a Markdown or plaintext file.
 2. Put cursor inside a placeholder, for example: `The bell felt {{mood}}.`
 3. Wait for auto suggestions or run command `Saurus: Generate Placeholder Suggestions`.
-4. Pick a replacement from the completion list.
-5. To force new options, choose `↻ Get different options`.
+4. Pick a replacement from the grouped completion list.
+5. Thesaurus suggestions appear first and are always cached.
+6. AI suggestions either auto-run (`saurus.ai.autoRun: true`) or run on demand via `↻ Generate AI options`.
+7. To force additional AI options, choose `↻ Get more AI options`.
 
 Selected-text workflow:
 
 1. Select text you want alternatives for.
 2. Press `cmd+shift+s` (macOS) or `ctrl+shift+s` (Windows/Linux).
 3. Saurus wraps the selection in configured delimiters and opens the autocomplete popover.
-4. Pick a replacement from the popover, or choose `↻ Get different options` to append more suggestions.
+4. Pick a replacement from the popover, or choose `↻ Generate/Get more AI options` to append more suggestions.
 
 ## Commands
 
 - `Saurus: Generate Placeholder Suggestions` (`saurus.generateSuggestions`)
 - `Saurus: Suggest For Selected Text` (`saurus.suggestForSelection`)
-- `Saurus: Get Different Placeholder Options` (`saurus.refreshSuggestions`)
+- `Saurus: Get More AI Options` (`saurus.refreshSuggestions`)
 - `Saurus: Disable Auto Trigger (Workspace)` (`saurus.disableAutoTriggerForWorkspace`)
 
 ## Settings
@@ -82,6 +87,11 @@ All settings are under `saurus.*`.
 - `saurus.languages`
 - `saurus.delimiters.open`
 - `saurus.delimiters.close`
+- `saurus.thesaurus.enabled`
+- `saurus.thesaurus.provider`
+- `saurus.thesaurus.apiKey`
+- `saurus.thesaurus.timeoutMs`
+- `saurus.ai.autoRun`
 - `saurus.placeholderHighlight.enabled`
 - `saurus.placeholderHighlight.backgroundColor`
 - `saurus.placeholderHighlight.borderColor`
@@ -104,10 +114,12 @@ Example workspace settings:
 {
   "saurus.delimiters.open": "[[",
   "saurus.delimiters.close": "]]",
-  "saurus.placeholderHighlight.backgroundColor": "rgba(56, 189, 248, 0.12)",
-  "saurus.placeholderHighlight.delimiterColor": "#0369a1",
-  "saurus.placeholderHighlight.textColor": "#0c4a6e",
-  "saurus.suggestions.count": 6,
+  "saurus.thesaurus.enabled": true,
+  "saurus.thesaurus.provider": "merriamWebster",
+  "saurus.thesaurus.apiKey": "YOUR_MW_API_KEY",
+  "saurus.thesaurus.timeoutMs": 10000,
+  "saurus.ai.autoRun": false,
+  "saurus.suggestions.count": 10,
   "saurus.codex.model": "gpt-5.3-codex",
   "saurus.codex.reasoningEffort": "low",
   "saurus.prompt.template": "Give ${suggestionCount} literary replacements for ${placeholder}. Context: ${contextBefore} || ${contextAfter}. Avoid: ${avoidSuggestions}. Return JSON {\"suggestions\":[\"...\"]}."
@@ -128,6 +140,7 @@ Example workspace settings:
 
 - `Codex CLI was not found`: set `saurus.codex.path` or install Codex CLI.
 - `Codex CLI is not logged in`: run `codex login`.
+- `Merriam-Webster thesaurus API key is missing`: set `saurus.thesaurus.apiKey`.
 - No new results on refresh: adjust prompt template or context window.
 
 ## Performance Tips

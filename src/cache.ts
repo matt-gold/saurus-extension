@@ -1,8 +1,19 @@
-import { GenerationState, SuggestionCacheEntry, SuggestionKey } from "./types";
+import {
+  GenerationState,
+  SourceGenerationStates,
+  SuggestionCacheEntry,
+  SuggestionKey,
+  SuggestionSource
+} from "./types";
+
+const DEFAULT_SOURCE_STATES: SourceGenerationStates = {
+  thesaurus: "idle",
+  ai: "idle"
+};
 
 export class SuggestionCache {
   private readonly entries = new Map<SuggestionKey, SuggestionCacheEntry>();
-  private readonly states = new Map<SuggestionKey, GenerationState>();
+  private readonly sourceStates = new Map<SuggestionKey, SourceGenerationStates>();
   private readonly keyToUri = new Map<SuggestionKey, string>();
   private readonly inFlight = new Map<SuggestionKey, Promise<unknown>>();
 
@@ -13,21 +24,34 @@ export class SuggestionCache {
   public setEntry(key: SuggestionKey, entry: SuggestionCacheEntry): void {
     this.entries.set(key, entry);
     this.keyToUri.set(key, entry.documentUri);
-    this.states.set(key, "ready");
   }
 
   public deleteEntry(key: SuggestionKey): void {
     this.entries.delete(key);
-    this.states.delete(key);
+    this.sourceStates.delete(key);
     this.keyToUri.delete(key);
   }
 
-  public getState(key: SuggestionKey): GenerationState {
-    return this.states.get(key) ?? "idle";
+  public getSourceStates(key: SuggestionKey): SourceGenerationStates {
+    return this.sourceStates.get(key) ?? DEFAULT_SOURCE_STATES;
   }
 
-  public setState(key: SuggestionKey, state: GenerationState, documentUri?: string): void {
-    this.states.set(key, state);
+  public getSourceState(key: SuggestionKey, source: SuggestionSource): GenerationState {
+    return this.getSourceStates(key)[source];
+  }
+
+  public setSourceState(
+    key: SuggestionKey,
+    source: SuggestionSource,
+    state: GenerationState,
+    documentUri?: string
+  ): void {
+    const next: SourceGenerationStates = {
+      ...this.getSourceStates(key),
+      [source]: state
+    };
+    this.sourceStates.set(key, next);
+
     if (documentUri) {
       this.keyToUri.set(key, documentUri);
     }
@@ -40,7 +64,7 @@ export class SuggestionCache {
       }
 
       this.entries.delete(key);
-      this.states.delete(key);
+      this.sourceStates.delete(key);
       this.keyToUri.delete(key);
       this.inFlight.delete(key);
     }

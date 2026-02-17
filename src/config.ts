@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { CodexReasoningEffort, SaurusSettings } from "./types";
+import { CodexReasoningEffort, SaurusSettings, ThesaurusProviderKind } from "./types";
 
 export const DEFAULT_PROMPT_TEMPLATE = `You are helping with literary prose revision. Provide ${"${suggestionCount}"} replacement options for the placeholder.
 
@@ -31,11 +31,18 @@ function sanitizeDelimiter(input: string, fallback: string): string {
 
 const DEFAULT_REASONING_EFFORT: CodexReasoningEffort = "low";
 const DEFAULT_CODEX_MODEL = "gpt-5.3-codex";
+const DEFAULT_THESAURUS_PROVIDER: ThesaurusProviderKind = "merriamWebster";
 const REASONING_EFFORTS = new Set<CodexReasoningEffort>(["none", "low", "medium", "high", "xhigh"]);
+const THESAURUS_PROVIDERS = new Set<ThesaurusProviderKind>(["merriamWebster"]);
 
 function sanitizeReasoningEffort(input: string): CodexReasoningEffort {
   const normalized = input.trim().toLowerCase() as CodexReasoningEffort;
   return REASONING_EFFORTS.has(normalized) ? normalized : DEFAULT_REASONING_EFFORT;
+}
+
+function sanitizeThesaurusProvider(input: string): ThesaurusProviderKind {
+  const normalized = input.trim() as ThesaurusProviderKind;
+  return THESAURUS_PROVIDERS.has(normalized) ? normalized : DEFAULT_THESAURUS_PROVIDER;
 }
 
 export function getSettings(document?: vscode.TextDocument): SaurusSettings {
@@ -45,9 +52,11 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
   const suggestionCount = clampNumber(cfg.get<number>("suggestions.count", 10), 2, 20);
   const codexTimeoutMs = Math.max(1000, cfg.get<number>("codex.timeoutMs", 20000));
   const autoTriggerDebounceMs = Math.max(50, cfg.get<number>("autoTrigger.debounceMs", 250));
+  const thesaurusTimeoutMs = Math.max(500, cfg.get<number>("thesaurus.timeoutMs", 10000));
 
   const codexModelRaw = cfg.get<string>("codex.model", DEFAULT_CODEX_MODEL).trim();
   const codexReasoningEffortRaw = cfg.get<string>("codex.reasoningEffort", DEFAULT_REASONING_EFFORT);
+  const thesaurusProviderRaw = cfg.get<string>("thesaurus.provider", DEFAULT_THESAURUS_PROVIDER);
 
   return {
     enabled: cfg.get<boolean>("enabled", true),
@@ -65,7 +74,12 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
     codexPath: cfg.get<string>("codex.path", "codex"),
     codexModel: codexModelRaw.length > 0 ? codexModelRaw : DEFAULT_CODEX_MODEL,
     codexReasoningEffort: sanitizeReasoningEffort(codexReasoningEffortRaw),
-    codexTimeoutMs
+    codexTimeoutMs,
+    aiAutoRun: cfg.get<boolean>("ai.autoRun", false),
+    thesaurusEnabled: cfg.get<boolean>("thesaurus.enabled", true),
+    thesaurusProvider: sanitizeThesaurusProvider(thesaurusProviderRaw),
+    thesaurusApiKey: cfg.get<string>("thesaurus.apiKey", "").trim(),
+    thesaurusTimeoutMs
   };
 }
 

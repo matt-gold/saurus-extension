@@ -2,13 +2,13 @@
   "name": "saurus-extension",
   "displayName": "Saurus Extension",
   "description": "Placeholder replacement suggestions for creative writing via Codex CLI.",
-  "version": "0.1.8",
+  "version": "0.1.16",
   "icon": "assets/icon.png",
   "publisher": "mattgold",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/matt-gold/saurus-extension.git"
+    "url": "https://github.com/matt-gold/saurus.git"
   },
   "engines": {
     "vscode": "^1.92.0"
@@ -37,7 +37,7 @@
       },
       {
         "command": "saurus.refreshSuggestions",
-        "title": "Saurus: Get Different Placeholder Options"
+        "title": "Saurus: Get More AI Options"
       },
       {
         "command": "saurus.disableAutoTriggerForWorkspace",
@@ -72,6 +72,35 @@
           "type": "string",
           "default": "}}",
           "description": "Closing placeholder delimiter."
+        },
+        "saurus.thesaurus.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable dictionary thesaurus suggestions."
+        },
+        "saurus.thesaurus.provider": {
+          "type": "string",
+          "default": "merriamWebster",
+          "enum": [
+            "merriamWebster"
+          ],
+          "description": "Thesaurus provider implementation."
+        },
+        "saurus.thesaurus.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the configured thesaurus provider."
+        },
+        "saurus.thesaurus.timeoutMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 500,
+          "description": "Timeout for thesaurus requests in milliseconds."
+        },
+        "saurus.ai.autoRun": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, run AI generation automatically after thesaurus results. When false, run AI only via 'Get more AI options'."
         },
         "saurus.placeholderHighlight.enabled": {
           "type": "boolean",

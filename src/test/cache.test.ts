@@ -6,7 +6,8 @@ test("clears entries by document uri", () => {
   const cache = new SuggestionCache();
 
   cache.setEntry("file://a::1", {
-    options: ["one"],
+    thesaurusOptions: ["one"],
+    aiOptions: [],
     seenNormalized: new Set<string>(),
     seenRaw: [],
     createdAt: Date.now(),
@@ -15,7 +16,8 @@ test("clears entries by document uri", () => {
   });
 
   cache.setEntry("file://b::1", {
-    options: ["two"],
+    thesaurusOptions: ["two"],
+    aiOptions: [],
     seenNormalized: new Set<string>(),
     seenRaw: [],
     createdAt: Date.now(),

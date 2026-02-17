@@ -7,6 +7,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const controller = new SaurusController(context);
   const provider = new SaurusCompletionProvider(controller);
   const highlighter = new PlaceholderHighlighter(controller);
+  context.subscriptions.push(controller);
 
   const selector: vscode.DocumentSelector = [
     { scheme: "file" },

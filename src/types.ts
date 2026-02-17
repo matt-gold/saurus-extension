@@ -2,6 +2,13 @@ import * as vscode from "vscode";
 
 export type GenerationState = "idle" | "generating" | "ready" | "error";
 export type CodexReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type SuggestionSource = "thesaurus" | "ai";
+export type ThesaurusProviderKind = "merriamWebster";
+
+export interface SourceGenerationStates {
+  thesaurus: GenerationState;
+  ai: GenerationState;
+}
 
 export interface DelimiterPair {
   open: string;
@@ -22,6 +29,11 @@ export interface SaurusSettings {
   codexModel?: string;
   codexReasoningEffort: CodexReasoningEffort;
   codexTimeoutMs: number;
+  aiAutoRun: boolean;
+  thesaurusEnabled: boolean;
+  thesaurusProvider: ThesaurusProviderKind;
+  thesaurusApiKey: string;
+  thesaurusTimeoutMs: number;
 }
 
 export interface PlaceholderMatch {
@@ -36,12 +48,25 @@ export interface PlaceholderMatch {
 export type SuggestionKey = string;
 
 export interface SuggestionCacheEntry {
-  options: string[];
+  thesaurusOptions: string[];
+  aiOptions: string[];
+  thesaurusInfo?: ThesaurusLookupInfo;
   seenNormalized: Set<string>;
   seenRaw: string[];
   createdAt: number;
   documentVersion: number;
   documentUri: string;
+}
+
+export interface ThesaurusLookupInfo {
+  provider: string;
+  query: string;
+  entryCount: number;
+  suggestionCount: number;
+  partOfSpeech?: string;
+  definitions: string[];
+  stems: string[];
+  didYouMean: string[];
 }
 
 export interface SuggestionRequest {

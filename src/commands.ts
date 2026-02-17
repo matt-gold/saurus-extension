@@ -14,18 +14,29 @@ import { addSuggestionsToSeen, dedupeSuggestions } from "./normalize";
 import { SuggestionCache } from "./cache";
 import {
   PlaceholderMatch,
-  GenerationState,
   SaurusSettings,
+  SourceGenerationStates,
   SuggestionCacheEntry,
+  ThesaurusLookupInfo,
   SuggestionRequest,
   SuggestionKeyData
 } from "./types";
+import {
+  createThesaurusProvider,
+  extractThesaurusLookupTerm,
+  ThesaurusLookupResult,
+  ThesaurusConfigError,
+  ThesaurusRequestError
+} from "./thesaurusClient";
 
 export interface CompletionLookup {
   key: string;
   match: PlaceholderMatch;
   entry?: SuggestionCacheEntry;
-  state: GenerationState;
+  sourceStates: SourceGenerationStates;
+  aiAutoRun: boolean;
+  thesaurusProvider: SaurusSettings["thesaurusProvider"];
+  preferRefreshSelection: boolean;
 }
 
 interface GenerateOptions {
@@ -34,18 +45,49 @@ interface GenerateOptions {
   quietErrors?: boolean;
 }
 
-async function refreshSuggestWidget(): Promise<void> {
-  await vscode.commands.executeCommand("hideSuggestWidget");
-  await new Promise<void>((resolve) => setTimeout(resolve, 16));
-  await vscode.commands.executeCommand("editor.action.triggerSuggest");
+interface RefreshSuggestOptions {
+  hard?: boolean;
+  repeat?: number;
 }
 
-export class SaurusController {
+async function sleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function refreshSuggestWidget(options: RefreshSuggestOptions = {}): Promise<void> {
+  const hard = options.hard ?? false;
+  const repeat = Math.max(1, options.repeat ?? 1);
+
+  if (hard) {
+    await vscode.commands.executeCommand("hideSuggestWidget");
+    await sleep(18);
+  }
+
+  for (let index = 0; index < repeat; index += 1) {
+    await vscode.commands.executeCommand("editor.action.triggerSuggest");
+    if (index < repeat - 1) {
+      await sleep(18);
+    }
+  }
+}
+
+export class SaurusController implements vscode.Disposable {
   private readonly cache = new SuggestionCache();
   private readonly schemaPath: string;
+  private readonly completionItemsChangedEmitter = new vscode.EventEmitter<void>();
+  private readonly preferRefreshSelectionKeys = new Set<string>();
+  public readonly onDidChangeCompletionItems = this.completionItemsChangedEmitter.event;
 
   public constructor(private readonly extensionContext: vscode.ExtensionContext) {
     this.schemaPath = extensionContext.asAbsolutePath(path.join("resources", "suggestions.schema.json"));
+  }
+
+  public dispose(): void {
+    this.completionItemsChangedEmitter.dispose();
+  }
+
+  private notifyCompletionItemsChanged(): void {
+    this.completionItemsChangedEmitter.fire();
   }
 
   public getSettings(document?: vscode.TextDocument): SaurusSettings {
@@ -79,11 +121,22 @@ export class SaurusController {
 
     const keyData = this.buildSuggestionKeyData(document, match, settings);
 
+    const cachedEntry = this.cache.getEntry(keyData.key);
+    const entry = cachedEntry
+      ? {
+        ...cachedEntry,
+        thesaurusOptions: settings.thesaurusEnabled ? cachedEntry.thesaurusOptions : []
+      }
+      : undefined;
+
     return {
       key: keyData.key,
       match,
-      entry: this.cache.getEntry(keyData.key),
-      state: this.cache.getState(keyData.key)
+      entry,
+      sourceStates: this.cache.getSourceStates(keyData.key),
+      aiAutoRun: settings.aiAutoRun,
+      thesaurusProvider: settings.thesaurusProvider,
+      preferRefreshSelection: this.preferRefreshSelectionKeys.has(keyData.key)
     };
   }
 
@@ -106,7 +159,14 @@ export class SaurusController {
   }
 
   public invalidateDocument(document: vscode.TextDocument): void {
-    this.cache.clearDocument(document.uri.toString());
+    const documentUri = document.uri.toString();
+    this.cache.clearDocument(documentUri);
+    for (const key of this.preferRefreshSelectionKeys) {
+      if (key.startsWith(`${documentUri}::`)) {
+        this.preferRefreshSelectionKeys.delete(key);
+      }
+    }
+    this.notifyCompletionItemsChanged();
   }
 
   public async generateForEditor(editor: vscode.TextEditor, options: GenerateOptions): Promise<void> {
@@ -132,61 +192,148 @@ export class SaurusController {
     const documentUri = document.uri.toString();
     const existingEntry = this.cache.getEntry(suggestionKey);
 
-    if (!options.forceDifferent && existingEntry) {
-      this.cache.setState(suggestionKey, "ready", documentUri);
+    const shouldRunAi = options.forceDifferent || settings.aiAutoRun;
+    const shouldRunThesaurus = settings.thesaurusEnabled;
+    const needsThesaurus = shouldRunThesaurus && (!existingEntry || existingEntry.thesaurusOptions.length === 0);
+    const needsAi = shouldRunAi && (options.forceDifferent || !existingEntry || existingEntry.aiOptions.length === 0);
+
+    if (!needsThesaurus && !needsAi && existingEntry) {
+      this.updateSourceStatesForEntry(suggestionKey, existingEntry, settings, documentUri);
       return;
     }
 
+    if (needsThesaurus) {
+      this.cache.setSourceState(suggestionKey, "thesaurus", "generating", documentUri);
+    }
+    if (needsAi) {
+      this.cache.setSourceState(suggestionKey, "ai", "generating", documentUri);
+    }
+    if (needsThesaurus || needsAi) {
+      this.notifyCompletionItemsChanged();
+    }
+
+    const loadingSources: string[] = [];
+    if (needsThesaurus) {
+      loadingSources.push("thesaurus");
+    }
+    if (needsAi) {
+      loadingSources.push("AI");
+    }
+    const loadingMessage = vscode.window.setStatusBarMessage(
+      `$(loading~spin) Saurus: loading ${loadingSources.join(" + ")} suggestions...`
+    );
+
     const requestVersion = document.version;
-    this.cache.setState(suggestionKey, "generating", documentUri);
-    let newlyAddedOptionsCount = 0;
+    let newlyAddedAiOptions = 0;
+    let aiAttempted = false;
+    let aiFailed = false;
 
     try {
       await this.cache.runExclusive(suggestionKey, async () => {
-        const seenNormalized = new Set<string>(existingEntry?.seenNormalized ?? []);
-        const seenRaw = existingEntry ? [...existingEntry.seenRaw] : [];
+        const entryAtStart = this.cache.getEntry(suggestionKey) ?? existingEntry;
+        let thesaurusOptions = entryAtStart ? [...entryAtStart.thesaurusOptions] : [];
+        let aiOptions = entryAtStart ? [...entryAtStart.aiOptions] : [];
+        let thesaurusInfo: ThesaurusLookupInfo | undefined = entryAtStart?.thesaurusInfo;
+        const seenNormalized = new Set<string>(entryAtStart?.seenNormalized ?? []);
+        const seenRaw = entryAtStart ? [...entryAtStart.seenRaw] : [];
 
-        if (options.forceDifferent && existingEntry) {
-          addSuggestionsToSeen(existingEntry.options, seenNormalized, seenRaw);
+        addSuggestionsToSeen(thesaurusOptions, seenNormalized, seenRaw);
+        addSuggestionsToSeen(aiOptions, seenNormalized, seenRaw);
+
+        if (needsThesaurus) {
+          try {
+            const fetched = await this.fetchThesaurusSuggestions(match.rawInnerText, settings);
+
+            if (document.version !== requestVersion) {
+              this.cache.setSourceState(suggestionKey, "thesaurus", "idle", documentUri);
+              this.cache.setSourceState(suggestionKey, "ai", "idle", documentUri);
+              this.notifyCompletionItemsChanged();
+              return;
+            }
+
+            const deduped = dedupeSuggestions(fetched.suggestions, new Set<string>(), settings.suggestionCount);
+            thesaurusOptions = deduped;
+            thesaurusInfo = {
+              ...fetched.info,
+              suggestionCount: deduped.length
+            };
+            addSuggestionsToSeen(deduped, seenNormalized, seenRaw);
+            this.cache.setSourceState(suggestionKey, "thesaurus", "ready", documentUri);
+            this.notifyCompletionItemsChanged();
+          } catch (error) {
+            this.cache.setSourceState(suggestionKey, "thesaurus", "error", documentUri);
+            this.notifyCompletionItemsChanged();
+            if (!options.quietErrors) {
+              void vscode.window.showErrorMessage(`Saurus thesaurus: ${this.getErrorMessage(error)}`);
+            }
+          }
         }
 
-        const request: SuggestionRequest = {
-          placeholder: match.rawInnerText,
-          contextBefore: keyData.contextBefore,
-          contextAfter: keyData.contextAfter,
-          suggestionCount: settings.suggestionCount,
-          avoidSuggestions: seenRaw,
-          fileName: path.basename(document.fileName),
-          languageId: document.languageId
-        };
+        if (needsAi) {
+          aiAttempted = true;
+          const request: SuggestionRequest = {
+            placeholder: match.rawInnerText,
+            contextBefore: keyData.contextBefore,
+            contextAfter: keyData.contextAfter,
+            suggestionCount: settings.suggestionCount,
+            avoidSuggestions: seenRaw,
+            fileName: path.basename(document.fileName),
+            languageId: document.languageId
+          };
 
-        const prompt = renderPromptTemplate(settings.promptTemplate, toPromptVariables(request));
+          const prompt = renderPromptTemplate(settings.promptTemplate, toPromptVariables(request));
 
-        const response = await generateSuggestionsWithCodex({
-          codexPath: settings.codexPath,
-          model: settings.codexModel,
-          reasoningEffort: settings.codexReasoningEffort,
-          timeoutMs: settings.codexTimeoutMs,
-          workspaceDir: this.resolveWorkspaceDir(document),
-          schemaPath: this.schemaPath,
-          prompt
-        });
+          try {
+            const response = await generateSuggestionsWithCodex({
+              codexPath: settings.codexPath,
+              model: settings.codexModel,
+              reasoningEffort: settings.codexReasoningEffort,
+              timeoutMs: settings.codexTimeoutMs,
+              workspaceDir: this.resolveWorkspaceDir(document),
+              schemaPath: this.schemaPath,
+              prompt
+            });
+
+            if (document.version !== requestVersion) {
+              this.cache.setSourceState(suggestionKey, "thesaurus", "idle", documentUri);
+              this.cache.setSourceState(suggestionKey, "ai", "idle", documentUri);
+              this.notifyCompletionItemsChanged();
+              return;
+            }
+
+            const nextOptions = dedupeSuggestions(response.suggestions, seenNormalized, settings.suggestionCount);
+            newlyAddedAiOptions = nextOptions.length;
+            addSuggestionsToSeen(nextOptions, seenNormalized, seenRaw);
+
+            aiOptions = options.forceDifferent ? [...aiOptions, ...nextOptions] : [...aiOptions, ...nextOptions];
+            this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
+            this.notifyCompletionItemsChanged();
+          } catch (error) {
+            aiFailed = true;
+            if (aiOptions.length > 0) {
+              this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
+            } else {
+              this.cache.setSourceState(suggestionKey, "ai", "error", documentUri);
+            }
+            this.notifyCompletionItemsChanged();
+
+            if (!options.quietErrors) {
+              void vscode.window.showErrorMessage(`Saurus AI: ${this.getErrorMessage(error)}`);
+            }
+          }
+        }
 
         if (document.version !== requestVersion) {
-          this.cache.setState(suggestionKey, "idle", documentUri);
+          this.cache.setSourceState(suggestionKey, "thesaurus", "idle", documentUri);
+          this.cache.setSourceState(suggestionKey, "ai", "idle", documentUri);
+          this.notifyCompletionItemsChanged();
           return;
         }
 
-        const nextOptions = dedupeSuggestions(response.suggestions, seenNormalized, settings.suggestionCount);
-        newlyAddedOptionsCount = nextOptions.length;
-        addSuggestionsToSeen(nextOptions, seenNormalized, seenRaw);
-
-        const combinedOptions = options.forceDifferent && existingEntry
-          ? [...existingEntry.options, ...nextOptions]
-          : nextOptions;
-
         const nextEntry: SuggestionCacheEntry = {
-          options: combinedOptions,
+          thesaurusOptions,
+          aiOptions,
+          thesaurusInfo,
           seenNormalized,
           seenRaw,
           createdAt: Date.now(),
@@ -195,17 +342,14 @@ export class SaurusController {
         };
 
         this.cache.setEntry(suggestionKey, nextEntry);
-        this.cache.setState(suggestionKey, "ready", documentUri);
+        this.updateSourceStatesForEntry(suggestionKey, nextEntry, settings, documentUri);
       });
-    } catch (error) {
-      this.handleGenerationError(error, existingEntry, suggestionKey, documentUri, options.quietErrors);
-      return;
+    } finally {
+      loadingMessage.dispose();
     }
 
-    if (options.forceDifferent) {
-      if (newlyAddedOptionsCount === 0) {
-        void vscode.window.showInformationMessage("Saurus: no novel options found for this placeholder. Try refreshing again or adjust the prompt.");
-      }
+    if (options.forceDifferent && aiAttempted && !aiFailed && newlyAddedAiOptions === 0) {
+      void vscode.window.setStatusBarMessage("Saurus: no novel AI options found for this placeholder.", 3000);
     }
   }
 
@@ -222,7 +366,7 @@ export class SaurusController {
         forceDifferent: false,
         showNoPlaceholderWarning: true
       });
-      await refreshSuggestWidget();
+      await refreshSuggestWidget({ hard: true, repeat: 2 });
       return;
     }
 
@@ -259,7 +403,7 @@ export class SaurusController {
       forceDifferent: false,
       showNoPlaceholderWarning: false
     });
-    await refreshSuggestWidget();
+    await refreshSuggestWidget({ hard: true, repeat: 2 });
   }
 
   public registerCommands(subscriptions: vscode.Disposable[]): void {
@@ -270,12 +414,18 @@ export class SaurusController {
           return;
         }
 
-        await this.generateForEditor(editor, {
+        const generationPromise = this.generateForEditor(editor, {
           forceDifferent: false,
           showNoPlaceholderWarning: true
         });
+        const key = this.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
+        if (key) {
+          this.preferRefreshSelectionKeys.delete(key);
+        }
+        await refreshSuggestWidget({ repeat: 2 });
+        await generationPromise;
 
-        await refreshSuggestWidget();
+        await refreshSuggestWidget({ hard: true, repeat: 2 });
       })
     );
 
@@ -307,12 +457,90 @@ export class SaurusController {
           editor.selection = new vscode.Selection(target, target);
         }
 
-        await this.generateForEditor(editor, {
+        const generationPromise = this.generateForEditor(editor, {
           forceDifferent: true,
           showNoPlaceholderWarning: true
         });
+        const key = this.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
+        if (key) {
+          this.preferRefreshSelectionKeys.add(key);
+        }
+        await refreshSuggestWidget({ repeat: 2 });
+        await generationPromise;
 
-        await refreshSuggestWidget();
+        await refreshSuggestWidget({ hard: true, repeat: 2 });
+      })
+    );
+
+    subscriptions.push(
+      vscode.commands.registerCommand("saurus.applySuggestion", async (
+        uri?: string,
+        line?: number,
+        character?: number,
+        suggestion?: string
+      ) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || typeof suggestion !== "string") {
+          return;
+        }
+
+        if (
+          typeof uri === "string" &&
+          typeof line === "number" &&
+          typeof character === "number" &&
+          editor.document.uri.toString() === uri
+        ) {
+          const target = new vscode.Position(line, character);
+          editor.selection = new vscode.Selection(target, target);
+        }
+
+        const document = editor.document;
+        const settings = this.getSettings(document);
+        if (!settings.enabled || !settings.languages.includes(document.languageId)) {
+          return;
+        }
+
+        const match = findPlaceholderAtPosition(document, editor.selection.active, settings.delimiters);
+        if (!match) {
+          return;
+        }
+        const previousKey = this.buildSuggestionKeyData(document, match, settings).key;
+
+        const didEdit = await editor.edit((editBuilder) => {
+          editBuilder.replace(match.fullRange, suggestion);
+        });
+
+        if (!didEdit) {
+          return;
+        }
+
+        const caret = new vscode.Position(
+          match.fullRange.start.line,
+          match.fullRange.start.character + suggestion.length
+        );
+        editor.selection = new vscode.Selection(caret, caret);
+        this.preferRefreshSelectionKeys.delete(previousKey);
+      })
+    );
+
+    subscriptions.push(
+      vscode.commands.registerCommand("saurus.reopenSuggestions", async (uri?: string, line?: number, character?: number) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          return;
+        }
+
+        if (
+          typeof uri === "string" &&
+          typeof line === "number" &&
+          typeof character === "number" &&
+          editor.document.uri.toString() === uri
+        ) {
+          const target = new vscode.Position(line, character);
+          editor.selection = new vscode.Selection(target, target);
+        }
+
+        await refreshSuggestWidget({ hard: true, repeat: 1 });
       })
     );
 
@@ -331,6 +559,49 @@ export class SaurusController {
     }
 
     return path.dirname(document.fileName);
+  }
+
+  private async fetchThesaurusSuggestions(
+    rawPlaceholder: string,
+    settings: SaurusSettings
+  ): Promise<ThesaurusLookupResult> {
+    if (!settings.thesaurusEnabled) {
+      return {
+        suggestions: [],
+        info: {
+          provider: settings.thesaurusProvider,
+          query: rawPlaceholder.trim(),
+          entryCount: 0,
+          suggestionCount: 0,
+          definitions: [],
+          stems: [],
+          didYouMean: []
+        }
+      };
+    }
+
+    const lookupTerm = extractThesaurusLookupTerm(rawPlaceholder);
+    if (lookupTerm.length === 0) {
+      return {
+        suggestions: [],
+        info: {
+          provider: settings.thesaurusProvider,
+          query: lookupTerm,
+          entryCount: 0,
+          suggestionCount: 0,
+          definitions: [],
+          stems: [],
+          didYouMean: []
+        }
+      };
+    }
+
+    const provider = createThesaurusProvider(settings.thesaurusProvider);
+    return provider.lookup(lookupTerm, {
+      apiKey: settings.thesaurusApiKey,
+      timeoutMs: settings.thesaurusTimeoutMs,
+      maxSuggestions: settings.suggestionCount
+    });
   }
 
   private buildSuggestionKeyData(
@@ -368,31 +639,27 @@ export class SaurusController {
     };
   }
 
-  private handleGenerationError(
-    error: unknown,
-    existingEntry: SuggestionCacheEntry | undefined,
+  private updateSourceStatesForEntry(
     key: string,
-    documentUri: string,
-    quietErrors = false
+    entry: SuggestionCacheEntry,
+    settings: SaurusSettings,
+    documentUri: string
   ): void {
-    if (existingEntry) {
-      this.cache.setEntry(key, existingEntry);
-      this.cache.setState(key, "ready", documentUri);
-      if (!quietErrors) {
-        void vscode.window.showErrorMessage(`Saurus: ${this.getErrorMessage(error)} Showing previous cached options.`);
-      }
-      return;
-    }
+    const thesaurusState = settings.thesaurusEnabled
+      ? (entry.thesaurusOptions.length > 0 ? "ready" : "idle")
+      : "idle";
+    const aiState = entry.aiOptions.length > 0 ? "ready" : "idle";
 
-    this.cache.deleteEntry(key);
-    this.cache.setState(key, "error", documentUri);
-
-    if (!quietErrors) {
-      void vscode.window.showErrorMessage(`Saurus: ${this.getErrorMessage(error)}`);
-    }
+    this.cache.setSourceState(key, "thesaurus", thesaurusState, documentUri);
+    this.cache.setSourceState(key, "ai", aiState, documentUri);
+    this.notifyCompletionItemsChanged();
   }
 
   private getErrorMessage(error: unknown): string {
+    if (error instanceof ThesaurusConfigError || error instanceof ThesaurusRequestError) {
+      return error.message;
+    }
+
     if (error instanceof CodexCliMissingError) {
       return "Codex CLI was not found. Install Codex CLI or set saurus.codex.path.";
     }
