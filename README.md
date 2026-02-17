@@ -1,20 +1,25 @@
-# Saurus Extension
+# Saurus
 
-`Saurus Extension` adds placeholder replacement suggestions for prose writing in VS Code.
+`Saurus` is an AI-second writing tool designed to keep you in the flow.
 
-It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. Suggestions are generated through local `codex` CLI using your existing Codex/ChatGPT login.
+It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
+
+It is easy to lose your voice in AI slop with other writing tools. Saurus is designed to keep you honest and in the flow.
 
 ## Features
 
 - Configurable placeholder delimiters (default `{{` and `}}`)
-- Thesaurus suggestions (Merriam-Webster) shown first and cached per placeholder context
-- AI suggestions via Codex, optionally auto-run or on-demand
-- Grouped source labeling in the completion UI (`📚 Thesaurus`, `🤖 AI`)
+- Top heading row to exit and remove placeholder braces (`🦖  (Select a replacement)`)
+- Thesaurus suggestions (Merriam-Webster) shown first and cached per placeholder context (`📖`)
+- AI suggestions via Codex are optional (on-demand by default, auto-run configurable)
+- AI suggestions are prefixed with `✨`
+- Built for single words and short phrases to avoid generic long-form AI rewrites
 - Auto-trigger when cursor enters a placeholder
 - Manual commands for generate and novelty refresh
-- In-popover action: `↻ Generate/Get more AI options`
+- In-popover actions: `↻ Generate more` and `↻ Generate w/ prompt`
 - Workspace-configurable prompt template
 - Cache with force refresh that avoids previously shown options
+- Optional persistent cache across VS Code reloads with TTL pruning
 - Color-coded placeholder highlighting in the editor
 
 ## Requirements
@@ -60,23 +65,30 @@ This produces a `.vsix` you can install locally.
 1. Open a Markdown or plaintext file.
 2. Put cursor inside a placeholder, for example: `The bell felt {{mood}}.`
 3. Wait for auto suggestions or run command `Saurus: Generate Placeholder Suggestions`.
-4. Pick a replacement from the grouped completion list.
+4. Pick a replacement from the completion list, or use `🦖  (Select a replacement)` / `Esc` to exit and remove delimiters.
 5. Thesaurus suggestions appear first and are always cached.
-6. AI suggestions either auto-run (`saurus.ai.autoRun: true`) or run on demand via `↻ Generate AI options`.
-7. To force additional AI options, choose `↻ Get more AI options`.
+6. AI suggestions either auto-run (`saurus.ai.autoGenerateOnOpen: true`) or run on demand via `↻ Generate more`.
+7. To force additional AI options, choose `↻ Generate more`.
+8. To run a one-off directed generation, choose `↻ Generate w/ prompt` and enter a short instruction.
 
 Selected-text workflow:
 
 1. Select text you want alternatives for.
 2. Press `cmd+shift+s` (macOS) or `ctrl+shift+s` (Windows/Linux).
 3. Saurus wraps the selection in configured delimiters and opens the autocomplete popover.
-4. Pick a replacement from the popover, or choose `↻ Generate/Get more AI options` to append more suggestions.
+4. Pick a replacement from the popover, or choose `↻ Generate more` to append more suggestions.
+5. Inside a placeholder, press `cmd+shift+a` / `ctrl+shift+a` for AI-only view, or `cmd+shift+z` / `ctrl+shift+z` for thesaurus-only view.
 
 ## Commands
 
 - `Saurus: Generate Placeholder Suggestions` (`saurus.generateSuggestions`)
 - `Saurus: Suggest For Selected Text` (`saurus.suggestForSelection`)
 - `Saurus: Get More AI Options` (`saurus.refreshSuggestions`)
+- `Saurus: Generate With Prompt` (`saurus.refreshSuggestionsWithPrompt`)
+- `Saurus: Show AI Suggestions Only` (`saurus.showAiOnlySuggestions`)
+- `Saurus: Show Thesaurus Suggestions Only` (`saurus.showThesaurusOnlySuggestions`)
+- `Saurus: Exit Placeholder Suggestions` (`saurus.exitPlaceholderSuggestions`)
+- `Saurus: Clear Persistent Cache` (`saurus.clearPersistentCache`)
 - `Saurus: Disable Auto Trigger (Workspace)` (`saurus.disableAutoTriggerForWorkspace`)
 
 ## Settings
@@ -91,7 +103,12 @@ All settings are under `saurus.*`.
 - `saurus.thesaurus.provider`
 - `saurus.thesaurus.apiKey`
 - `saurus.thesaurus.timeoutMs`
-- `saurus.ai.autoRun`
+- `saurus.thesaurus.maxSuggestions` (default `20`)
+- `saurus.ai.autoGenerateOnOpen`
+- `saurus.menu.thesaurusPrefix`
+- `saurus.menu.aiPrefix`
+- `saurus.cache.persistAcrossReload`
+- `saurus.cache.persistTtlDays`
 - `saurus.placeholderHighlight.enabled`
 - `saurus.placeholderHighlight.backgroundColor`
 - `saurus.placeholderHighlight.borderColor`
@@ -118,7 +135,12 @@ Example workspace settings:
   "saurus.thesaurus.provider": "merriamWebster",
   "saurus.thesaurus.apiKey": "YOUR_MW_API_KEY",
   "saurus.thesaurus.timeoutMs": 10000,
-  "saurus.ai.autoRun": false,
+  "saurus.thesaurus.maxSuggestions": 20,
+  "saurus.ai.autoGenerateOnOpen": false,
+  "saurus.menu.thesaurusPrefix": "📖",
+  "saurus.menu.aiPrefix": "✨",
+  "saurus.cache.persistAcrossReload": false,
+  "saurus.cache.persistTtlDays": 7,
   "saurus.suggestions.count": 10,
   "saurus.codex.model": "gpt-5.3-codex",
   "saurus.codex.reasoningEffort": "low",
@@ -133,6 +155,7 @@ Example workspace settings:
 - `${contextAfter}`
 - `${suggestionCount}`
 - `${avoidSuggestions}`
+- `${direction}`
 - `${fileName}`
 - `${languageId}`
 

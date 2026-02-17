@@ -1,8 +1,8 @@
 {
   "name": "saurus-extension",
-  "displayName": "Saurus Extension",
-  "description": "Placeholder replacement suggestions for creative writing via Codex CLI.",
-  "version": "0.1.16",
+  "displayName": "Saurus",
+  "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
+  "version": "0.1.36",
   "icon": "assets/icon.png",
   "publisher": "mattgold",
   "license": "UNLICENSED",
@@ -20,6 +20,11 @@
     "onCommand:saurus.generateSuggestions",
     "onCommand:saurus.suggestForSelection",
     "onCommand:saurus.refreshSuggestions",
+    "onCommand:saurus.refreshSuggestionsWithPrompt",
+    "onCommand:saurus.showAiOnlySuggestions",
+    "onCommand:saurus.showThesaurusOnlySuggestions",
+    "onCommand:saurus.exitPlaceholderSuggestions",
+    "onCommand:saurus.clearPersistentCache",
     "onCommand:saurus.disableAutoTriggerForWorkspace",
     "onLanguage:markdown",
     "onLanguage:plaintext"
@@ -38,6 +43,26 @@
       {
         "command": "saurus.refreshSuggestions",
         "title": "Saurus: Get More AI Options"
+      },
+      {
+        "command": "saurus.refreshSuggestionsWithPrompt",
+        "title": "Saurus: Generate With Prompt"
+      },
+      {
+        "command": "saurus.showAiOnlySuggestions",
+        "title": "Saurus: Show AI Suggestions Only"
+      },
+      {
+        "command": "saurus.showThesaurusOnlySuggestions",
+        "title": "Saurus: Show Thesaurus Suggestions Only"
+      },
+      {
+        "command": "saurus.exitPlaceholderSuggestions",
+        "title": "Saurus: Exit Placeholder Suggestions"
+      },
+      {
+        "command": "saurus.clearPersistentCache",
+        "title": "Saurus: Clear Persistent Cache"
       },
       {
         "command": "saurus.disableAutoTriggerForWorkspace",
@@ -97,10 +122,45 @@
           "minimum": 500,
           "description": "Timeout for thesaurus requests in milliseconds."
         },
+        "saurus.thesaurus.maxSuggestions": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Maximum number of thesaurus suggestions to keep per placeholder."
+        },
+        "saurus.ai.autoGenerateOnOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically generate AI suggestions when opening a placeholder. When false, AI runs only via 'Generate/Get more AI options'."
+        },
         "saurus.ai.autoRun": {
           "type": "boolean",
           "default": false,
-          "description": "When true, run AI generation automatically after thesaurus results. When false, run AI only via 'Get more AI options'."
+          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.autoGenerateOnOpen`.",
+          "description": "Deprecated alias for auto-generating AI suggestions on placeholder open."
+        },
+        "saurus.menu.thesaurusPrefix": {
+          "type": "string",
+          "default": "📖",
+          "description": "Prefix string shown before thesaurus entries."
+        },
+        "saurus.menu.aiPrefix": {
+          "type": "string",
+          "default": "✨",
+          "description": "Prefix string shown before AI entries."
+        },
+        "saurus.cache.persistAcrossReload": {
+          "type": "boolean",
+          "default": false,
+          "description": "Persist suggestion cache to disk and restore it across VS Code reloads."
+        },
+        "saurus.cache.persistTtlDays": {
+          "type": "number",
+          "default": 7,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "Number of days before persisted cache entries expire."
         },
         "saurus.placeholderHighlight.enabled": {
           "type": "boolean",
@@ -109,29 +169,29 @@
         },
         "saurus.placeholderHighlight.backgroundColor": {
           "type": "string",
-          "default": "rgba(56, 189, 248, 0.2)",
+          "default": "rgba(34, 197, 94, 0.16)",
           "description": "Background color for highlighted placeholders."
         },
         "saurus.placeholderHighlight.borderColor": {
           "type": "string",
-          "default": "rgba(125, 211, 252, 0.65)",
+          "default": "rgba(74, 222, 128, 0.55)",
           "description": "Border color for highlighted placeholders."
         },
         "saurus.placeholderHighlight.delimiterColor": {
           "type": "string",
-          "default": "#bae6fd",
+          "default": "#86efac",
           "description": "Text color used for placeholder delimiters."
         },
         "saurus.placeholderHighlight.textColor": {
           "type": "string",
-          "default": "#e0f2fe",
+          "default": "#dcfce7",
           "description": "Text color used for placeholder content."
         },
         "saurus.prompt.template": {
           "type": "string",
           "scope": "window",
-          "default": "You are helping with literary prose revision. Provide ${suggestionCount} replacement options for the placeholder.\n\nReturn valid JSON only with this shape: {\\\"suggestions\\\":[\\\"...\\\"]}.\nKeep options concise and stylistically consistent with nearby prose.\nDo not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).\n\nPlaceholder text:\n${placeholder}\n\nContext before:\n${contextBefore}\n\nContext after:\n${contextAfter}\n\nAvoid suggestions:\n${avoidSuggestions}\n",
-          "description": "Prompt template used for Codex generation. Supports ${placeholder}, ${contextBefore}, ${contextAfter}, ${suggestionCount}, ${avoidSuggestions}, ${fileName}, ${languageId}."
+          "default": "You are helping with literary prose revision. Provide ${suggestionCount} replacement options for the placeholder.\n\nReturn valid JSON only with this shape: {\\\"suggestions\\\":[\\\"...\\\"]}.\nKeep options concise and stylistically consistent with nearby prose.\nDo not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).\n\nPlaceholder text:\n${placeholder}\n\nContext before:\n${contextBefore}\n\nContext after:\n${contextAfter}\n\nAvoid suggestions:\n${avoidSuggestions}\n\nAdditional direction (optional):\n${direction}\n",
+          "description": "Prompt template used for Codex generation. Supports ${placeholder}, ${contextBefore}, ${contextAfter}, ${suggestionCount}, ${avoidSuggestions}, ${direction}, ${fileName}, ${languageId}."
         },
         "saurus.suggestions.count": {
           "type": "number",
@@ -200,6 +260,25 @@
         "linux": "ctrl+shift+s",
         "win": "ctrl+shift+s",
         "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "saurus.showAiOnlySuggestions",
+        "mac": "cmd+shift+a",
+        "linux": "ctrl+shift+a",
+        "win": "ctrl+shift+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "saurus.showThesaurusOnlySuggestions",
+        "mac": "cmd+shift+z",
+        "linux": "ctrl+shift+z",
+        "win": "ctrl+shift+z",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "saurus.exitPlaceholderSuggestions",
+        "key": "escape",
+        "when": "suggestWidgetVisible && editorTextFocus"
       }
     ]
   },

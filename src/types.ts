@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 export type GenerationState = "idle" | "generating" | "ready" | "error";
 export type CodexReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type SuggestionSource = "thesaurus" | "ai";
+export type SuggestionSourceFilter = "all" | "aiOnly" | "thesaurusOnly";
 export type ThesaurusProviderKind = "merriamWebster";
 
 export interface SourceGenerationStates {
@@ -30,10 +31,15 @@ export interface SaurusSettings {
   codexReasoningEffort: CodexReasoningEffort;
   codexTimeoutMs: number;
   aiAutoRun: boolean;
+  thesaurusPrefix: string;
+  aiPrefix: string;
   thesaurusEnabled: boolean;
   thesaurusProvider: ThesaurusProviderKind;
   thesaurusApiKey: string;
   thesaurusTimeoutMs: number;
+  thesaurusMaxSuggestions: number;
+  cachePersistAcrossReload: boolean;
+  cachePersistTtlDays: number;
 }
 
 export interface PlaceholderMatch {
@@ -51,11 +57,17 @@ export interface SuggestionCacheEntry {
   thesaurusOptions: string[];
   aiOptions: string[];
   thesaurusInfo?: ThesaurusLookupInfo;
+  thesaurusLastResponseCached: boolean;
+  lastAiPrompt?: string;
+  aiLoadedCount: number;
+  aiLastAddedCount: number;
+  aiLastResponseCached: boolean;
   seenNormalized: Set<string>;
   seenRaw: string[];
   createdAt: number;
   documentVersion: number;
   documentUri: string;
+  lastAccessedAt: number;
 }
 
 export interface ThesaurusLookupInfo {
@@ -75,6 +87,7 @@ export interface SuggestionRequest {
   contextAfter: string;
   suggestionCount: number;
   avoidSuggestions: string[];
+  direction: string;
   fileName: string;
   languageId: string;
 }

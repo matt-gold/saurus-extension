@@ -1,6 +1,6 @@
-import { SourceGenerationStates } from "./types";
+import { SourceGenerationStates, SuggestionSourceFilter } from "./types";
 
-export type ProviderMenuItemKind = "refresh" | "suggestion" | "section" | "loading" | "empty";
+export type ProviderMenuItemKind = "heading" | "refresh" | "refreshWithPrompt" | "suggestion" | "loading" | "empty";
 export type ProviderMenuItemSource = "thesaurus" | "ai";
 
 export interface ProviderMenuItem {
@@ -10,35 +10,26 @@ export interface ProviderMenuItem {
   insertText: string;
   detail?: string;
   sortText: string;
+  disabled?: boolean;
 }
 
 export interface BuildProviderItemsInput {
   sourceStates: SourceGenerationStates;
+  sourceFilter: SuggestionSourceFilter;
   hasEntry: boolean;
   thesaurusOptions: string[];
   aiOptions: string[];
   thesaurusCached: boolean;
   aiCached: boolean;
+  aiLoadedCount: number;
+  aiLastAddedCount: number;
+  aiLastResponseCached: boolean;
   thesaurusProvider: string;
+  thesaurusPrefix: string;
+  aiPrefix: string;
   placeholderRawText: string;
   aiAutoRun: boolean;
-}
-
-function pushSection(
-  items: ProviderMenuItem[],
-  source: ProviderMenuItemSource,
-  label: string,
-  sortText: string,
-  detail: string
-): void {
-  items.push({
-    kind: "section",
-    source,
-    label,
-    insertText: "",
-    sortText,
-    detail
-  });
+  aiActiveAction?: "refresh" | "refreshWithPrompt";
 }
 
 function formatThesaurusProviderName(provider: string): string {
@@ -49,11 +40,17 @@ function formatThesaurusProviderName(provider: string): string {
   return provider;
 }
 
+function buildThesaurusDetail(providerName: string, cached: boolean, fetching: boolean): string {
+  const source = cached ? `From ${providerName} cache` : `From ${providerName} API`;
+  return fetching ? `${source} • fetching now` : source;
+}
+
 function pushSuggestionItems(
   items: ProviderMenuItem[],
   source: ProviderMenuItemSource,
   options: string[],
   sortPrefix: string,
+  emojiPrefix: string,
   startingNumber: number,
   detail: string
 ): void {
@@ -62,7 +59,7 @@ function pushSuggestionItems(
     items.push({
       kind: "suggestion",
       source,
-      label: `${nextNumber}. ${option}`,
+      label: `${emojiPrefix} ${nextNumber}  ${option}`,
       insertText: option,
       detail,
       sortText: `${sortPrefix}${String(index).padStart(3, "0")}`
@@ -71,90 +68,107 @@ function pushSuggestionItems(
   });
 }
 
+function withPrefix(prefix: string, text: string): string {
+  if (prefix.length === 0) {
+    return text;
+  }
+  return `${prefix} ${text}`;
+}
+
 export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenuItem[] {
   if (!input.hasEntry && input.sourceStates.thesaurus === "idle" && input.sourceStates.ai === "idle") {
     return [];
   }
 
   const items: ProviderMenuItem[] = [];
+  const showThesaurus = input.sourceFilter !== "aiOnly";
+  const showAi = input.sourceFilter !== "thesaurusOnly";
 
-  const thesaurusProviderName = formatThesaurusProviderName(input.thesaurusProvider);
-  const thesaurusCacheDetail = input.thesaurusCached ? "yes" : "no";
-  const thesaurusFetchDetail = input.sourceStates.thesaurus === "generating" ? " • Fetching: yes" : "";
-  const thesaurusSuggestionDetail = `Source: ${thesaurusProviderName} • Cached: ${thesaurusCacheDetail}`;
-  pushSection(
-    items,
-    "thesaurus",
-    "--- Thesaurus ---",
-    "0000",
-    `Source: ${thesaurusProviderName} • Cached: ${thesaurusCacheDetail}${thesaurusFetchDetail}`
-  );
-  if (input.sourceStates.thesaurus === "generating" && input.thesaurusOptions.length === 0) {
-    items.push({
-      kind: "loading",
-      source: "thesaurus",
-      label: "$(loading~spin) Loading thesaurus suggestions...",
-      insertText: "",
-      detail: "Saurus is requesting dictionary suggestions",
-      sortText: "0001"
-    });
-  } else if (input.thesaurusOptions.length > 0) {
-    pushSuggestionItems(items, "thesaurus", input.thesaurusOptions, "001", 1, thesaurusSuggestionDetail);
-  } else {
-    items.push({
-      kind: "empty",
-      source: "thesaurus",
-      label: "No thesaurus suggestions found",
-      insertText: "",
-      detail: "Try a simpler placeholder word",
-      sortText: "0099"
-    });
+  items.push({
+    kind: "heading",
+    label: "🦖  (Select a replacement below)",
+    insertText: "",
+    detail: "[Esc] to exit",
+    sortText: "0000"
+  });
+
+  if (showThesaurus) {
+    const thesaurusProviderName = formatThesaurusProviderName(input.thesaurusProvider);
+    const thesaurusFetching = input.sourceStates.thesaurus === "generating";
+    const thesaurusSuggestionDetail = buildThesaurusDetail(thesaurusProviderName, input.thesaurusCached, false);
+    if (input.sourceStates.thesaurus === "generating" && input.thesaurusOptions.length === 0) {
+      items.push({
+        kind: "loading",
+        source: "thesaurus",
+        label: withPrefix(input.thesaurusPrefix, "$(loading~spin) Loading thesaurus suggestions..."),
+        insertText: "",
+        detail: buildThesaurusDetail(thesaurusProviderName, input.thesaurusCached, thesaurusFetching),
+        sortText: "0100"
+      });
+    } else if (input.thesaurusOptions.length > 0) {
+      pushSuggestionItems(items, "thesaurus", input.thesaurusOptions, "011", input.thesaurusPrefix, 1, thesaurusSuggestionDetail);
+    } else {
+      items.push({
+        kind: "empty",
+        source: "thesaurus",
+        label: withPrefix(input.thesaurusPrefix, "No thesaurus suggestions found"),
+        insertText: "",
+        detail: "Try a simpler placeholder word",
+        sortText: "0199"
+      });
+    }
   }
 
-  const aiCacheDetail = input.aiCached ? "yes" : "no";
-  const aiModeDetail = input.aiAutoRun ? "auto" : "on-demand";
-  const aiFetchDetail = input.sourceStates.ai === "generating" ? " • Fetching: yes" : "";
-  const aiSuggestionDetail = `Source: Codex • Cached: ${aiCacheDetail}`;
-  pushSection(
-    items,
-    "ai",
-    "--- AI ---",
-    "0100",
-    `Source: Codex • Cached: ${aiCacheDetail} • Mode: ${aiModeDetail}${aiFetchDetail}`
-  );
-  if (input.sourceStates.ai === "generating") {
-    items.push({
-      kind: "loading",
-      source: "ai",
-      label: "$(loading~spin) Generating AI suggestions...",
-      insertText: "",
-      detail: "Saurus is requesting options from Codex",
-      sortText: "0101"
-    });
-  }
+  if (showAi) {
+    const aiSuggestionDetail = input.aiCached ? "From Codex cache" : "From Codex CLI";
+    if (input.sourceStates.ai === "generating") {
+      items.push({
+        kind: "loading",
+        source: "ai",
+        label: withPrefix(input.aiPrefix, "$(loading~spin) Generating AI suggestions..."),
+        insertText: "",
+        detail: "Saurus is requesting options from Codex",
+        sortText: "0200"
+      });
+    }
 
-  if (input.aiOptions.length > 0) {
-    pushSuggestionItems(items, "ai", input.aiOptions, "011", 1, aiSuggestionDetail);
-  } else if (input.aiAutoRun && input.sourceStates.ai !== "generating") {
-    items.push({
-      kind: "empty",
-      source: "ai",
-      label: "No AI suggestions yet",
-      insertText: "",
-      detail: "Try ↻ Get more AI options",
-      sortText: "0199"
-    });
-  }
+    if (input.aiOptions.length > 0) {
+      pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
+    } else if (input.aiAutoRun && input.sourceStates.ai !== "generating") {
+      items.push({
+        kind: "empty",
+        source: "ai",
+        label: withPrefix(input.aiPrefix, "No AI suggestions yet"),
+        insertText: "",
+        detail: "Try ↻ Generate more",
+        sortText: "0299"
+      });
+    }
 
-  if (input.sourceStates.ai !== "generating") {
     items.push({
       kind: "refresh",
-      label: input.aiOptions.length > 0
-        ? "↻ Get more AI options"
-        : "↻ Generate AI options",
+      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
+        ? "$(loading~spin) Getting more AI options..."
+        : "↻ Generate more",
       insertText: input.placeholderRawText,
-      detail: "Generate additional AI options and avoid repeats",
-      sortText: "9999"
+      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
+        ? "Getting more AI options from Codex"
+        : "with Codex CLI",
+      sortText: "9900",
+      disabled: input.sourceStates.ai === "generating"
+    });
+
+    items.push({
+      kind: "refreshWithPrompt",
+      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
+        ? "$(loading~spin) Generating with prompt..."
+        : "↻ Generate w/ prompt",
+      insertText: input.placeholderRawText,
+      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
+        ? "Generating with your custom direction"
+        : "with Codex CLI",
+      sortText: "9901",
+      disabled: input.sourceStates.ai === "generating"
     });
   }
 

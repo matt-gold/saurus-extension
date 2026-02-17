@@ -18,12 +18,29 @@ export class SuggestionCache {
   private readonly inFlight = new Map<SuggestionKey, Promise<unknown>>();
 
   public getEntry(key: SuggestionKey): SuggestionCacheEntry | undefined {
-    return this.entries.get(key);
+    const entry = this.entries.get(key);
+    if (entry) {
+      entry.lastAccessedAt = Date.now();
+    }
+    return entry;
   }
 
   public setEntry(key: SuggestionKey, entry: SuggestionCacheEntry): void {
+    if (!entry.lastAccessedAt) {
+      entry.lastAccessedAt = Date.now();
+    }
     this.entries.set(key, entry);
     this.keyToUri.set(key, entry.documentUri);
+  }
+
+  public setEntries(entries: Map<SuggestionKey, SuggestionCacheEntry>): void {
+    for (const [key, entry] of entries.entries()) {
+      this.setEntry(key, entry);
+    }
+  }
+
+  public listEntries(): Map<SuggestionKey, SuggestionCacheEntry> {
+    return new Map(this.entries);
   }
 
   public deleteEntry(key: SuggestionKey): void {
@@ -68,6 +85,13 @@ export class SuggestionCache {
       this.keyToUri.delete(key);
       this.inFlight.delete(key);
     }
+  }
+
+  public clearAll(): void {
+    this.entries.clear();
+    this.sourceStates.clear();
+    this.keyToUri.clear();
+    this.inFlight.clear();
   }
 
   public hasEntry(key: SuggestionKey): boolean {

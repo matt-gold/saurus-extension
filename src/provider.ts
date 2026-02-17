@@ -47,6 +47,25 @@ function buildThesaurusDocumentation(info?: ThesaurusLookupInfo): vscode.Markdow
   return doc;
 }
 
+function buildAiDocumentation(prompt?: string): vscode.MarkdownString {
+  const doc = new vscode.MarkdownString();
+  doc.isTrusted = false;
+  doc.supportHtml = false;
+
+  doc.appendMarkdown("**AI Prompt Context**\n\n");
+  doc.appendMarkdown("- Prompt setting key: `saurus.prompt.template`\n");
+  doc.appendMarkdown("- Edit it in Workspace/User Settings to change AI generation behavior.\n");
+
+  if (!prompt || prompt.trim().length === 0) {
+    doc.appendMarkdown("\n_No AI prompt has been run for this placeholder yet._\n");
+    return doc;
+  }
+
+  doc.appendMarkdown("\n**Prompt used for the latest AI request**\n\n");
+  doc.appendCodeblock(prompt, "text");
+  return doc;
+}
+
 export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
   public readonly onDidChangeCompletionItems: vscode.Event<void>;
 
@@ -65,14 +84,21 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
 
     const menuItems = buildProviderItems({
       sourceStates: lookup.sourceStates,
+      sourceFilter: lookup.sourceFilter,
       hasEntry: Boolean(lookup.entry),
       thesaurusOptions: lookup.entry?.thesaurusOptions ?? [],
       aiOptions: lookup.entry?.aiOptions ?? [],
-      thesaurusCached: (lookup.entry?.thesaurusOptions.length ?? 0) > 0,
-      aiCached: (lookup.entry?.aiOptions.length ?? 0) > 0,
+      thesaurusCached: lookup.entry?.thesaurusLastResponseCached ?? false,
+      aiCached: lookup.entry?.aiLastResponseCached ?? false,
+      aiLoadedCount: lookup.entry?.aiLoadedCount ?? (lookup.entry?.aiOptions.length ?? 0),
+      aiLastAddedCount: lookup.entry?.aiLastAddedCount ?? 0,
+      aiLastResponseCached: lookup.entry?.aiLastResponseCached ?? true,
       thesaurusProvider: lookup.thesaurusProvider,
+      thesaurusPrefix: lookup.thesaurusPrefix,
+      aiPrefix: lookup.aiPrefix,
       placeholderRawText: lookup.match.rawFullText,
-      aiAutoRun: lookup.aiAutoRun
+      aiAutoRun: lookup.aiAutoRun,
+      aiActiveAction: lookup.aiActiveAction
     });
 
     if (menuItems.length === 0) {
@@ -90,19 +116,21 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
       item.detail = menuItem.detail;
       if (menuItem.source === "thesaurus") {
         item.documentation = buildThesaurusDocumentation(lookup.entry?.thesaurusInfo);
+      } else if (menuItem.source === "ai") {
+        item.documentation = buildAiDocumentation(lookup.entry?.lastAiPrompt);
       }
 
-      if (menuItem.kind === "refresh") {
-        // Keep this row command-only; do not edit document text.
+      if (menuItem.kind === "heading") {
+        // Hard-close row: remove delimiters and close suggestions.
         item.insertText = "";
         item.range = new vscode.Range(position, position);
-        if (preferRefreshSelection) {
+        if (!preferRefreshSelection) {
           item.preselect = true;
           didPreselectAny = true;
         }
         item.command = {
-          command: "saurus.refreshSuggestions",
-          title: "Get more AI options",
+          command: "saurus.exitPlaceholderSuggestions",
+          title: "Exit placeholder suggestions",
           arguments: [
             document.uri.toString(),
             lookup.match.innerRange.start.line,
@@ -113,8 +141,42 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
         continue;
       }
 
+      if (menuItem.kind === "refresh" || menuItem.kind === "refreshWithPrompt") {
+        // Keep this row command-only; do not edit document text.
+        item.insertText = "";
+        item.range = new vscode.Range(position, position);
+        if (menuItem.kind === "refresh" && preferRefreshSelection) {
+          item.preselect = true;
+          didPreselectAny = true;
+        }
+        item.command = menuItem.disabled
+          ? {
+            command: "saurus.reopenSuggestions",
+            title: "Continue suggestions",
+            arguments: [
+              document.uri.toString(),
+              lookup.match.innerRange.start.line,
+              lookup.match.innerRange.start.character
+            ]
+          }
+          : {
+            command: menuItem.kind === "refresh"
+              ? "saurus.refreshSuggestions"
+              : "saurus.refreshSuggestionsWithPrompt",
+            title: menuItem.kind === "refresh"
+              ? "Generate more"
+              : "Generate w/ prompt",
+            arguments: [
+              document.uri.toString(),
+              lookup.match.innerRange.start.line,
+              lookup.match.innerRange.start.character
+            ]
+          };
+        completionItems.push(item);
+        continue;
+      }
+
       if (
-        menuItem.kind === "section" ||
         menuItem.kind === "loading" ||
         menuItem.kind === "empty"
       ) {

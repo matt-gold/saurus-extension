@@ -7,6 +7,7 @@ export interface PromptTemplateVariables {
   contextAfter: string;
   suggestionCount: number;
   avoidSuggestions: string[];
+  direction: string;
   fileName: string;
   languageId: string;
 }
@@ -30,6 +31,7 @@ export function renderPromptTemplate(template: string, variables: PromptTemplate
     contextAfter: variables.contextAfter,
     suggestionCount: String(variables.suggestionCount),
     avoidSuggestions: formatAvoidSuggestions(variables.avoidSuggestions),
+    direction: variables.direction,
     fileName: variables.fileName,
     languageId: variables.languageId
   };
@@ -46,7 +48,22 @@ export function toPromptVariables(request: SuggestionRequest): PromptTemplateVar
     contextAfter: request.contextAfter,
     suggestionCount: request.suggestionCount,
     avoidSuggestions: request.avoidSuggestions,
+    direction: request.direction,
     fileName: request.fileName,
     languageId: request.languageId
   };
+}
+
+export function appendDirectionGuidance(prompt: string, direction: string): string {
+  const normalizedDirection = direction.trim();
+  if (normalizedDirection.length === 0) {
+    return prompt;
+  }
+
+  return [
+    prompt.trimEnd(),
+    "",
+    "Additional direction for this run:",
+    `- ${normalizedDirection}`
+  ].join("\n");
 }

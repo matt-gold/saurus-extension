@@ -8,27 +8,58 @@ test("clears entries by document uri", () => {
   cache.setEntry("file://a::1", {
     thesaurusOptions: ["one"],
     aiOptions: [],
+    thesaurusLastResponseCached: true,
+    aiLoadedCount: 0,
+    aiLastAddedCount: 0,
+    aiLastResponseCached: true,
     seenNormalized: new Set<string>(),
     seenRaw: [],
     createdAt: Date.now(),
     documentVersion: 1,
-    documentUri: "file://a"
+    documentUri: "file://a",
+    lastAccessedAt: Date.now()
   });
 
   cache.setEntry("file://b::1", {
     thesaurusOptions: ["two"],
     aiOptions: [],
+    thesaurusLastResponseCached: true,
+    aiLoadedCount: 0,
+    aiLastAddedCount: 0,
+    aiLastResponseCached: true,
     seenNormalized: new Set<string>(),
     seenRaw: [],
     createdAt: Date.now(),
     documentVersion: 1,
-    documentUri: "file://b"
+    documentUri: "file://b",
+    lastAccessedAt: Date.now()
   });
 
   cache.clearDocument("file://a");
 
   assert.equal(cache.hasEntry("file://a::1"), false);
   assert.equal(cache.hasEntry("file://b::1"), true);
+});
+
+test("clearAll removes all entries", () => {
+  const cache = new SuggestionCache();
+  cache.setEntry("file://a::1", {
+    thesaurusOptions: ["one"],
+    aiOptions: ["two"],
+    thesaurusLastResponseCached: false,
+    aiLoadedCount: 1,
+    aiLastAddedCount: 1,
+    aiLastResponseCached: false,
+    seenNormalized: new Set<string>(),
+    seenRaw: [],
+    createdAt: Date.now(),
+    documentVersion: 1,
+    documentUri: "file://a",
+    lastAccessedAt: Date.now()
+  });
+
+  cache.clearAll();
+  assert.equal(cache.hasEntry("file://a::1"), false);
 });
 
 test("runExclusive deduplicates concurrent work", async () => {

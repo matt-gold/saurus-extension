@@ -14,10 +14,10 @@ function getHighlightSettings(document?: vscode.TextDocument): HighlightSettings
   const cfg = vscode.workspace.getConfiguration("saurus", document);
   return {
     enabled: cfg.get<boolean>("placeholderHighlight.enabled", true),
-    backgroundColor: cfg.get<string>("placeholderHighlight.backgroundColor", "rgba(56, 189, 248, 0.2)"),
-    borderColor: cfg.get<string>("placeholderHighlight.borderColor", "rgba(125, 211, 252, 0.65)"),
-    delimiterColor: cfg.get<string>("placeholderHighlight.delimiterColor", "#bae6fd"),
-    textColor: cfg.get<string>("placeholderHighlight.textColor", "#e0f2fe")
+    backgroundColor: cfg.get<string>("placeholderHighlight.backgroundColor", "rgba(34, 197, 94, 0.16)"),
+    borderColor: cfg.get<string>("placeholderHighlight.borderColor", "rgba(74, 222, 128, 0.55)"),
+    delimiterColor: cfg.get<string>("placeholderHighlight.delimiterColor", "#86efac"),
+    textColor: cfg.get<string>("placeholderHighlight.textColor", "#dcfce7")
   };
 }
 

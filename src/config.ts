@@ -18,6 +18,9 @@ ${"${contextAfter}"}
 
 Avoid suggestions:
 ${"${avoidSuggestions}"}
+
+Additional direction (optional):
+${"${direction}"}
 `;
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -32,6 +35,8 @@ function sanitizeDelimiter(input: string, fallback: string): string {
 const DEFAULT_REASONING_EFFORT: CodexReasoningEffort = "low";
 const DEFAULT_CODEX_MODEL = "gpt-5.3-codex";
 const DEFAULT_THESAURUS_PROVIDER: ThesaurusProviderKind = "merriamWebster";
+const DEFAULT_THESAURUS_PREFIX = "📖";
+const DEFAULT_AI_PREFIX = "✨";
 const REASONING_EFFORTS = new Set<CodexReasoningEffort>(["none", "low", "medium", "high", "xhigh"]);
 const THESAURUS_PROVIDERS = new Set<ThesaurusProviderKind>(["merriamWebster"]);
 
@@ -53,10 +58,14 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
   const codexTimeoutMs = Math.max(1000, cfg.get<number>("codex.timeoutMs", 20000));
   const autoTriggerDebounceMs = Math.max(50, cfg.get<number>("autoTrigger.debounceMs", 250));
   const thesaurusTimeoutMs = Math.max(500, cfg.get<number>("thesaurus.timeoutMs", 10000));
+  const thesaurusMaxSuggestions = clampNumber(cfg.get<number>("thesaurus.maxSuggestions", 20), 1, 50);
 
   const codexModelRaw = cfg.get<string>("codex.model", DEFAULT_CODEX_MODEL).trim();
   const codexReasoningEffortRaw = cfg.get<string>("codex.reasoningEffort", DEFAULT_REASONING_EFFORT);
   const thesaurusProviderRaw = cfg.get<string>("thesaurus.provider", DEFAULT_THESAURUS_PROVIDER);
+  const aiAutoRunLegacy = cfg.get<boolean>("ai.autoRun", false);
+  const aiAutoGenerateOnOpen = cfg.get<boolean>("ai.autoGenerateOnOpen", aiAutoRunLegacy);
+  const cachePersistTtlDays = clampNumber(cfg.get<number>("cache.persistTtlDays", 7), 1, 30);
 
   return {
     enabled: cfg.get<boolean>("enabled", true),
@@ -75,11 +84,16 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
     codexModel: codexModelRaw.length > 0 ? codexModelRaw : DEFAULT_CODEX_MODEL,
     codexReasoningEffort: sanitizeReasoningEffort(codexReasoningEffortRaw),
     codexTimeoutMs,
-    aiAutoRun: cfg.get<boolean>("ai.autoRun", false),
+    aiAutoRun: aiAutoGenerateOnOpen,
+    thesaurusPrefix: cfg.get<string>("menu.thesaurusPrefix", DEFAULT_THESAURUS_PREFIX),
+    aiPrefix: cfg.get<string>("menu.aiPrefix", DEFAULT_AI_PREFIX),
     thesaurusEnabled: cfg.get<boolean>("thesaurus.enabled", true),
     thesaurusProvider: sanitizeThesaurusProvider(thesaurusProviderRaw),
     thesaurusApiKey: cfg.get<string>("thesaurus.apiKey", "").trim(),
-    thesaurusTimeoutMs
+    thesaurusTimeoutMs,
+    thesaurusMaxSuggestions,
+    cachePersistAcrossReload: cfg.get<boolean>("cache.persistAcrossReload", false),
+    cachePersistTtlDays
   };
 }
 
