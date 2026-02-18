@@ -64,7 +64,6 @@ Recommended settings:
   "saurus.ai.path": "codex",
   "saurus.ai.model": "gpt-5.3-codex",
   "saurus.ai.reasoningEffort": "low",
-  "saurus.ai.autoGenerateOnOpen": false
 }
 ```
 
