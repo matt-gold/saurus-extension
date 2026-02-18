@@ -74,6 +74,38 @@ npm run package
 
 This produces a `.vsix` you can install locally.
 
+## CI/CD
+
+Saurus uses a minimal GitHub Actions pipeline:
+
+- `CI` (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
+  - `npm ci`
+  - `npm run compile`
+  - `npm test`
+  - `npm run package`
+  - uploads `.vsix` artifact
+- `Release` (`.github/workflows/release.yml`) runs on push to `main`:
+  - runs Release Please to open/update release PRs
+  - after release PR merge, builds/tests/packages again
+  - uploads VSIX to GitHub Release
+  - publishes to VS Marketplace
+
+Required GitHub secret:
+
+- `VSCE_PAT` (Visual Studio Marketplace publisher token)
+
+Branch protection recommendation:
+
+- protect `main`
+- require PRs
+- require status check: `ci`
+
+Conventional commits are recommended (not enforced) for better semver/changelog quality:
+
+- `feat:` -> minor
+- `fix:` -> patch
+- `BREAKING CHANGE` or `!` -> major
+
 ## Usage
 
 1. Open a Markdown or plaintext file.
@@ -141,10 +173,6 @@ All settings are under `saurus.*`.
 - `saurus.autoTrigger.debounceMs`
 - `saurus.context.charsBefore`
 - `saurus.context.charsAfter`
-- `saurus.codex.path` (deprecated alias of `saurus.ai.path`)
-- `saurus.codex.model` (deprecated alias of `saurus.ai.model`)
-- `saurus.codex.reasoningEffort` (deprecated alias of `saurus.ai.reasoningEffort`)
-- `saurus.codex.timeoutMs` (deprecated alias of `saurus.ai.timeoutMs`)
 
 Example workspace settings:
 
@@ -206,3 +234,7 @@ Claude provider example:
 - Keep `saurus.ai.reasoningEffort` at `low` for faster responses.
 - Lower `saurus.suggestions.count` if latency is high (default is `10`).
 - Reduce `saurus.context.charsBefore` / `saurus.context.charsAfter` if latency is high.
+
+Claude note:
+- `saurus.ai.reasoningEffort` is applied for Claude via environment variables (`CLAUDE_CODE_EFFORT_LEVEL`; `none` maps to `MAX_THINKING_TOKENS=0`).
+- Claude Code currently documents effort levels for Opus 4.6.

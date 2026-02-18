@@ -2,10 +2,10 @@
   "name": "saurus-extension",
   "displayName": "Saurus",
   "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
-  "version": "0.1.43",
+  "version": "0.1.45",
   "icon": "assets/icon.png",
   "publisher": "mattgold",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/matt-gold/saurus.git"
@@ -134,12 +134,6 @@
           "default": false,
           "description": "Automatically generate AI suggestions when opening a placeholder. When false, AI runs only via 'Generate/Get more AI options'."
         },
-        "saurus.ai.autoRun": {
-          "type": "boolean",
-          "default": false,
-          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.autoGenerateOnOpen`.",
-          "description": "Deprecated alias for auto-generating AI suggestions on placeholder open."
-        },
         "saurus.ai.provider": {
           "type": "string",
           "default": "codex",
@@ -170,7 +164,7 @@
             "high",
             "xhigh"
           ],
-          "description": "AI reasoning effort. Lower effort is usually faster."
+          "description": "AI reasoning effort. Lower effort is usually faster. For Claude, this maps to Claude Code effort env vars."
         },
         "saurus.ai.timeoutMs": {
           "type": "number",
@@ -270,38 +264,6 @@
           "default": 140,
           "minimum": 0,
           "description": "Characters of context after placeholder to include in prompt."
-        },
-        "saurus.codex.path": {
-          "type": "string",
-          "default": "codex",
-          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.path`.",
-          "description": "Deprecated alias for AI CLI path."
-        },
-        "saurus.codex.model": {
-          "type": "string",
-          "default": "gpt-5.3-codex",
-          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.model`.",
-          "description": "Deprecated alias for AI model."
-        },
-        "saurus.codex.reasoningEffort": {
-          "type": "string",
-          "default": "low",
-          "enum": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.reasoningEffort`.",
-          "description": "Deprecated alias for AI reasoning effort."
-        },
-        "saurus.codex.timeoutMs": {
-          "type": "number",
-          "default": 20000,
-          "minimum": 1000,
-          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.timeoutMs`.",
-          "description": "Deprecated alias for AI request timeout."
         }
       }
     },

@@ -35,7 +35,6 @@ function sanitizeDelimiter(input: string, fallback: string): string {
 const DEFAULT_AI_PROVIDER: AiProviderKind = "codex";
 const DEFAULT_REASONING_EFFORT: AiReasoningEffort = "low";
 const DEFAULT_ACTIVATION_MODE: ActivationMode = "hybrid";
-const DEFAULT_CODEX_MODEL = "gpt-5.3-codex";
 const DEFAULT_THESAURUS_PROVIDER: ThesaurusProviderKind = "merriamWebster";
 const DEFAULT_THESAURUS_PREFIX = "📖";
 const DEFAULT_AI_PREFIX = "✨";
@@ -79,25 +78,18 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
 
   const languages = cfg.get<string[]>("languages", ["markdown", "plaintext"]);
   const suggestionCount = clampNumber(cfg.get<number>("suggestions.count", 10), 2, 20);
-  const legacyCodexTimeoutMs = Math.max(1000, cfg.get<number>("codex.timeoutMs", 20000));
-  const aiTimeoutMs = Math.max(1000, cfg.get<number>("ai.timeoutMs", legacyCodexTimeoutMs));
+  const aiTimeoutMs = Math.max(1000, cfg.get<number>("ai.timeoutMs", 20000));
   const autoTriggerDebounceMs = Math.max(50, cfg.get<number>("autoTrigger.debounceMs", 250));
   const thesaurusTimeoutMs = Math.max(500, cfg.get<number>("thesaurus.timeoutMs", 10000));
   const thesaurusMaxSuggestions = clampNumber(cfg.get<number>("thesaurus.maxSuggestions", 20), 1, 50);
 
   const aiProvider = sanitizeAiProvider(cfg.get<string>("ai.provider", DEFAULT_AI_PROVIDER));
   const aiPathRaw = cfg.get<string>("ai.path", "").trim();
-  const legacyCodexPathRaw = cfg.get<string>("codex.path", "").trim();
   const aiModelRaw = cfg.get<string>("ai.model", "").trim();
-  const legacyCodexModelRaw = cfg.get<string>("codex.model", DEFAULT_CODEX_MODEL).trim();
-  const aiReasoningEffortRaw = cfg.get<string>(
-    "ai.reasoningEffort",
-    cfg.get<string>("codex.reasoningEffort", DEFAULT_REASONING_EFFORT)
-  );
+  const aiReasoningEffortRaw = cfg.get<string>("ai.reasoningEffort", DEFAULT_REASONING_EFFORT);
   const activationModeRaw = cfg.get<string>("activation.modeOnEnter", DEFAULT_ACTIVATION_MODE);
   const thesaurusProviderRaw = cfg.get<string>("thesaurus.provider", DEFAULT_THESAURUS_PROVIDER);
-  const aiAutoRunLegacy = cfg.get<boolean>("ai.autoRun", false);
-  const aiAutoGenerateOnOpen = cfg.get<boolean>("ai.autoGenerateOnOpen", aiAutoRunLegacy);
+  const aiAutoGenerateOnOpen = cfg.get<boolean>("ai.autoGenerateOnOpen", false);
   const cachePersistTtlDays = clampNumber(cfg.get<number>("cache.persistTtlDays", 7), 1, 30);
 
   return {
@@ -117,10 +109,8 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
     aiProvider,
     aiPath: aiPathRaw.length > 0
       ? aiPathRaw
-      : (legacyCodexPathRaw.length > 0 ? legacyCodexPathRaw : getDefaultAiPath(aiProvider)),
-    aiModel: aiModelRaw.length > 0
-      ? aiModelRaw
-      : (aiProvider === "codex" ? legacyCodexModelRaw : undefined),
+      : getDefaultAiPath(aiProvider),
+    aiModel: aiModelRaw.length > 0 ? aiModelRaw : undefined,
     aiReasoningEffort: sanitizeReasoningEffort(aiReasoningEffortRaw),
     aiTimeoutMs,
     aiAutoRun: aiAutoGenerateOnOpen,

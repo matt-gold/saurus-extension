@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release_please:
+    name: release_please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - name: Run Release Please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          command: manifest
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    needs: release_please
+    if: ${{ needs.release_please.outputs.release_created == 'true' || needs.release_please.outputs.releases_created == 'true' }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release_please.outputs.tag_name || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Resolve release tag
+        run: |
+          if [ -n "${{ needs.release_please.outputs.tag_name }}" ]; then
+            echo "RELEASE_TAG=${{ needs.release_please.outputs.tag_name }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=v$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Resolve VSIX path
+        run: |
+          VSIX_PATH="$(ls -1 *.vsix | head -n 1)"
+          if [ -z "$VSIX_PATH" ]; then
+            echo "No VSIX file found after packaging."
+            exit 1
+          fi
+          echo "VSIX_PATH=$VSIX_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload VSIX to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: ${{ env.VSIX_PATH }}
+
+      - name: Validate VS Marketplace token
+        run: |
+          if [ -z "${{ secrets.VSCE_PAT }}" ]; then
+            echo "Missing VSCE_PAT secret. Add it in repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Publish to VS Marketplace
+        run: npx @vscode/vsce publish -p "${{ secrets.VSCE_PAT }}"

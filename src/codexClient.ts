@@ -18,24 +18,13 @@ export interface AiRequestOptions extends AiExecOptions {
   prompt: string;
 }
 
-export interface CodexExecOptions {
-  codexPath: string;
-  model?: string;
-  reasoningEffort?: AiReasoningEffort;
-  timeoutMs: number;
-  workspaceDir: string;
-  schemaPath: string;
-}
-
-export interface CodexRequestOptions extends CodexExecOptions {
-  prompt: string;
-}
-
 interface CommandResult {
   code: number;
   stdout: string;
   stderr: string;
 }
+
+type CommandEnvOverrides = Record<string, string>;
 
 function normalizeProviderLabel(provider: AiProviderKind): string {
   switch (provider) {
@@ -98,27 +87,6 @@ export class AiRequestError extends Error {
   }
 }
 
-export class CodexCliMissingError extends AiCliMissingError {
-  public constructor(message = "Codex CLI not found. Install Codex CLI or update saurus.ai.path.") {
-    super("codex", message);
-    this.name = "CodexCliMissingError";
-  }
-}
-
-export class CodexAuthError extends AiAuthError {
-  public constructor(message = "Codex CLI is not authenticated. Run `codex login` and try again.") {
-    super("codex", message);
-    this.name = "CodexAuthError";
-  }
-}
-
-export class CodexRequestError extends AiRequestError {
-  public constructor(message: string) {
-    super(message);
-    this.name = "CodexRequestError";
-  }
-}
-
 export function buildAiExecArgs(options: AiExecOptions, outputLastMessagePath: string, prompt: string): string[] {
   if (options.aiProvider === "codex") {
     const args = [
@@ -175,34 +143,22 @@ export function buildAiLoginStatusArgs(provider: AiProviderKind, aiPath?: string
   return undefined;
 }
 
-export function buildCodexExecArgs(options: CodexExecOptions, outputLastMessagePath: string): string[] {
-  return buildAiExecArgs({
-    aiProvider: "codex",
-    aiPath: options.codexPath,
-    model: options.model,
-    reasoningEffort: options.reasoningEffort,
-    timeoutMs: options.timeoutMs,
-    workspaceDir: options.workspaceDir,
-    schemaPath: options.schemaPath
-  }, outputLastMessagePath, "");
-}
-
-export function buildCodexLoginStatusArgs(): string[] {
-  return ["login", "status"];
-}
-
 async function runCommand(
   command: string,
   args: string[],
   cwd: string,
   timeoutMs: number,
   provider: AiProviderKind,
-  input?: string
+  input?: string,
+  envOverrides?: CommandEnvOverrides
 ): Promise<CommandResult> {
   return new Promise<CommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      env: process.env,
+      env: {
+        ...process.env,
+        ...(envOverrides ?? {})
+      },
       stdio: "pipe"
     });
 
@@ -376,6 +332,36 @@ function maybeMapToAuthError(provider: AiProviderKind, stderr: string, stdout: s
   return undefined;
 }
 
+export function buildAiEnvOverrides(
+  options: Pick<AiExecOptions, "aiProvider" | "reasoningEffort">
+): CommandEnvOverrides | undefined {
+  if (options.aiProvider !== "claude") {
+    return undefined;
+  }
+
+  const overrides: CommandEnvOverrides = {};
+  switch (options.reasoningEffort) {
+    case "none":
+      // Claude Code supports disabling extended thinking via MAX_THINKING_TOKENS=0.
+      overrides.MAX_THINKING_TOKENS = "0";
+      break;
+    case "low":
+      overrides.CLAUDE_CODE_EFFORT_LEVEL = "low";
+      break;
+    case "medium":
+      overrides.CLAUDE_CODE_EFFORT_LEVEL = "medium";
+      break;
+    case "high":
+    case "xhigh":
+      overrides.CLAUDE_CODE_EFFORT_LEVEL = "high";
+      break;
+    default:
+      break;
+  }
+
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
+
 async function ensureAiLoggedIn(options: AiExecOptions): Promise<void> {
   const loginArgs = buildAiLoginStatusArgs(options.aiProvider, options.aiPath);
   if (!loginArgs) {
@@ -420,13 +406,15 @@ export async function generateSuggestionsWithAi(options: AiRequestOptions): Prom
   try {
     const args = buildAiExecArgs(options, outputFile, options.prompt);
     const stdinPrompt = options.aiProvider === "codex" ? options.prompt : undefined;
+    const envOverrides = buildAiEnvOverrides(options);
     const result = await runCommand(
       options.aiPath,
       args,
       options.workspaceDir,
       options.timeoutMs,
       options.aiProvider,
-      stdinPrompt
+      stdinPrompt,
+      envOverrides
     );
 
     if (result.code !== 0) {
@@ -444,17 +432,4 @@ export async function generateSuggestionsWithAi(options: AiRequestOptions): Prom
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
-}
-
-export async function generateSuggestionsWithCodex(options: CodexRequestOptions): Promise<SuggestionResponse> {
-  return generateSuggestionsWithAi({
-    aiProvider: "codex",
-    aiPath: options.codexPath,
-    model: options.model,
-    reasoningEffort: options.reasoningEffort,
-    timeoutMs: options.timeoutMs,
-    workspaceDir: options.workspaceDir,
-    schemaPath: options.schemaPath,
-    prompt: options.prompt
-  });
 }

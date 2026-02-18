@@ -2,65 +2,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   AiAuthError,
+  buildAiEnvOverrides,
   buildAiExecArgs,
   buildAiLoginStatusArgs,
-  buildCodexExecArgs,
-  buildCodexLoginStatusArgs,
   getAiProviderLabel
 } from "../codexClient";
 
-test("buildCodexExecArgs includes required flags", () => {
-  const args = buildCodexExecArgs(
+test("buildAiExecArgs includes codex schema output flags", () => {
+  const args = buildAiExecArgs(
     {
-      codexPath: "codex",
+      aiProvider: "codex",
+      aiPath: "codex",
       timeoutMs: 20000,
       workspaceDir: "/tmp/workspace",
-      schemaPath: "/tmp/schema.json"
+      schemaPath: "/tmp/schema.json",
+      model: "gpt-5.3-codex",
+      reasoningEffort: "low"
     },
-    "/tmp/out.json"
+    "/tmp/out.json",
+    "hello"
   );
 
   assert.deepEqual(args.slice(0, 5), ["exec", "--ephemeral", "--skip-git-repo-check", "-C", "/tmp/workspace"]);
   assert.ok(args.includes("--output-schema"));
   assert.ok(args.includes("--output-last-message"));
-  assert.equal(args.at(-1), "-");
-});
-
-test("buildCodexExecArgs includes model when set", () => {
-  const args = buildCodexExecArgs(
-    {
-      codexPath: "codex",
-      timeoutMs: 20000,
-      workspaceDir: "/tmp/workspace",
-      schemaPath: "/tmp/schema.json",
-      model: "gpt-5"
-    },
-    "/tmp/out.json"
-  );
-
   assert.ok(args.includes("--model"));
-  assert.ok(args.includes("gpt-5"));
-});
-
-test("buildCodexExecArgs includes reasoning effort override when set", () => {
-  const args = buildCodexExecArgs(
-    {
-      codexPath: "codex",
-      timeoutMs: 20000,
-      workspaceDir: "/tmp/workspace",
-      schemaPath: "/tmp/schema.json",
-      reasoningEffort: "low"
-    },
-    "/tmp/out.json"
-  );
-
-  const configIndex = args.indexOf("-c");
-  assert.notEqual(configIndex, -1);
-  assert.equal(args[configIndex + 1], 'model_reasoning_effort="low"');
-});
-
-test("buildCodexLoginStatusArgs is stable", () => {
-  assert.deepEqual(buildCodexLoginStatusArgs(), ["login", "status"]);
+  assert.equal(args.at(-1), "-");
 });
 
 test("buildAiExecArgs includes provider-specific args for claude", () => {
@@ -130,4 +97,32 @@ test("getAiProviderLabel maps providers to display names", () => {
 test("AiAuthError gives provider-specific guidance for claude", () => {
   const error = new AiAuthError("claude");
   assert.match(error.message, /ANTHROPIC_API_KEY/);
+});
+
+test("buildAiEnvOverrides maps reasoning effort for claude", () => {
+  assert.deepEqual(
+    buildAiEnvOverrides({ aiProvider: "claude", reasoningEffort: "low" }),
+    { CLAUDE_CODE_EFFORT_LEVEL: "low" }
+  );
+  assert.deepEqual(
+    buildAiEnvOverrides({ aiProvider: "claude", reasoningEffort: "medium" }),
+    { CLAUDE_CODE_EFFORT_LEVEL: "medium" }
+  );
+  assert.deepEqual(
+    buildAiEnvOverrides({ aiProvider: "claude", reasoningEffort: "high" }),
+    { CLAUDE_CODE_EFFORT_LEVEL: "high" }
+  );
+  assert.deepEqual(
+    buildAiEnvOverrides({ aiProvider: "claude", reasoningEffort: "xhigh" }),
+    { CLAUDE_CODE_EFFORT_LEVEL: "high" }
+  );
+  assert.deepEqual(
+    buildAiEnvOverrides({ aiProvider: "claude", reasoningEffort: "none" }),
+    { MAX_THINKING_TOKENS: "0" }
+  );
+});
+
+test("buildAiEnvOverrides is undefined for non-claude providers", () => {
+  assert.equal(buildAiEnvOverrides({ aiProvider: "codex", reasoningEffort: "high" }), undefined);
+  assert.equal(buildAiEnvOverrides({ aiProvider: "copilot", reasoningEffort: "high" }), undefined);
 });

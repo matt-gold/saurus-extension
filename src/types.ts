@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 
 export type GenerationState = "idle" | "generating" | "ready" | "error";
 export type AiReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
-export type CodexReasoningEffort = AiReasoningEffort;
 export type AiProviderKind = "codex" | "copilot" | "claude";
 export type SuggestionSource = "thesaurus" | "ai";
 export type SuggestionSourceFilter = "all" | "aiOnly" | "thesaurusOnly";
