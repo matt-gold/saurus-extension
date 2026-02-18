@@ -4,11 +4,11 @@
 
 It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
 
-## Hotkeys First
+## Key Workflows
 
-These are the primary workflow:
+These are the primary workflows:
 
-- as you write, you can leave placeholders behind and come back to them later by wrapping text in the configurable delimeters, e.g. `I came, I saw, I {{took over}}`. Placeholders are highlighted and clicking into them will open the Saurus replacement window.
+- As you write, leave placeholders and come back later, for example: `I came, I saw, I {{took over}}`. Placeholders are highlighted, and placing the cursor inside one opens the Saurus suggestions window.
 - `cmd+shift+s` / `ctrl+shift+s`: wrap selected text in delimiters and open suggestions
 - `cmd+shift+a` / `ctrl+shift+a`: AI-only suggestions for the current placeholder (also wraps selection if needed)
 - `cmd+shift+z` / `ctrl+shift+z`: thesaurus-only suggestions for the current placeholder (also wraps selection if needed)
@@ -64,7 +64,7 @@ Recommended settings:
   "saurus.ai.provider": "codex",
   "saurus.ai.path": "codex",
   "saurus.ai.model": "gpt-5.3-codex",
-  "saurus.ai.reasoningEffort": "low",
+  "saurus.ai.reasoningEffort": "low"
 }
 ```
 
@@ -128,39 +128,6 @@ npm run package
 ```
 
 This produces a `.vsix` you can install locally.
-
-## CI/CD
-
-Saurus uses a minimal GitHub Actions pipeline:
-
-- `CI` (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
-  - `npm ci`
-  - `npm run compile`
-  - `npm test`
-  - `npm run package`
-  - uploads `.vsix` artifact
-- `Release` (`.github/workflows/release.yml`) runs only after `CI` succeeds on a `main` push:
-  - runs `changesets/action` to open/update the `Version Packages` PR when pending `.changeset/*.md` files exist
-  - when there are no pending changesets, computes the release tag (`saurus-extension-vX.Y.Z`) from `package.json`
-  - skips publish if that tag already exists
-  - otherwise builds/tests/packages again
-  - uploads VSIX to GitHub Release
-  - publishes to VS Marketplace
-
-Release authoring:
-
-- Feature/fix PRs should include a `.changeset/*.md` file (`npm run changeset`) unless the change should not affect version/changelog.
-- Install the official [changeset-bot GitHub App](https://github.com/apps/changeset-bot) on this repo so PRs missing changesets are flagged automatically.
-
-Required GitHub secret:
-
-- `VSCE_PAT` (Visual Studio Marketplace publisher token)
-
-Branch protection recommendation:
-
-- protect `main`
-- require PRs
-- require status check: `ci`
 
 ## Usage
 
@@ -274,3 +241,36 @@ Example workspace settings:
 Claude note:
 - `saurus.ai.reasoningEffort` is applied for Claude via environment variables (`CLAUDE_CODE_EFFORT_LEVEL`; `none` maps to `MAX_THINKING_TOKENS=0`).
 - Claude Code currently documents effort levels for Opus 4.6.
+
+## CI/CD
+
+Saurus uses a minimal GitHub Actions pipeline:
+
+- `CI` (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
+  - `npm ci`
+  - `npm run compile`
+  - `npm test`
+  - `npm run package`
+  - uploads `.vsix` artifact
+- `Release` (`.github/workflows/release.yml`) runs only after `CI` succeeds on a `main` push:
+  - runs `changesets/action` to open/update the `Version Packages` PR when pending `.changeset/*.md` files exist
+  - when there are no pending changesets, computes the release tag (`saurus-extension-vX.Y.Z`) from `package.json`
+  - skips publish if that tag already exists
+  - otherwise builds/tests/packages again
+  - uploads VSIX to GitHub Release
+  - publishes to VS Marketplace
+
+Release authoring:
+
+- Feature/fix PRs should include a `.changeset/*.md` file (`npm run changeset`) unless the change should not affect version/changelog.
+- Install the official [changeset-bot GitHub App](https://github.com/apps/changeset-bot) on this repo so PRs missing changesets are flagged automatically.
+
+Required GitHub secret:
+
+- `VSCE_PAT` (Visual Studio Marketplace publisher token)
+
+Branch protection recommendation:
+
+- protect `main`
+- require PRs
+- require status check: `ci`
