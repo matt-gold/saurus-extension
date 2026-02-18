@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/matt-gold/saurus/compare/saurus-extension-v0.1.1...saurus-extension-v0.1.2) (2026-02-18)
+
+
+### Bug Fixes
+
+* trigger release please ([1a6b6d4](https://github.com/matt-gold/saurus/commit/1a6b6d4c746c2371096117671eaa0ec5f8886db5))
+
 ## [0.1.1](https://github.com/matt-gold/saurus/compare/saurus-extension-v0.1.0...saurus-extension-v0.1.1) (2026-02-18)
 
 
