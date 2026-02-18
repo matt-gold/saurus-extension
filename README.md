@@ -16,19 +16,13 @@ These are the primary workflows:
 
 ## Features
 
-- Configurable placeholder delimiters (default `{{` and `}}`)
-- Top heading row to exit and remove placeholder braces (`🦖  (Select a replacement)`)
-- Thesaurus suggestions (Merriam-Webster) shown first and cached per placeholder context (`📖`)
-- AI suggestions are optional (on-demand by default, auto-run configurable)
-- AI suggestions are prefixed with `✨`
-- Built for single words and short phrases to avoid generic long-form AI rewrites
-- Auto-trigger when cursor enters a placeholder
-- Manual commands for generate and novelty refresh
-- In-popover actions: `↻ Generate more` and `↻ Generate w/ prompt`
-- Workspace-configurable prompt template
-- Cache with force refresh that avoids previously shown options
-- Optional persistent cache across VS Code reloads with TTL pruning
-- Color-coded placeholder highlighting in the editor
+- Thesaurus-first suggestions (Merriam-Webster) with AI as optional augmentation
+- Works best for single words and short phrases to preserve voice and avoid paragraph-level slop
+- Keyboard-first workflow for quick replacement without leaving the editor
+- Multiple AI provider support (`codex`, `copilot`, `claude`)
+- Configurable delimiters, language activation, and prompt template behavior
+- Smart caching for faster repeat lookups, with optional persistence across reloads
+- Visual placeholder highlighting so unfinished spots are easy to find
 
 ## Supported Files
 
