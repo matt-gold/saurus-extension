@@ -300,7 +300,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
-    "test": "npm run compile && node --test out/test/**/*.test.js",
+    "test": "npm run compile && node --test out/test/*.test.js",
     "package": "vsce package"
   },
   "devDependencies": {
