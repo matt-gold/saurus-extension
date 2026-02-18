@@ -43,7 +43,7 @@ jobs:
         uses: changesets/action@v1
         with:
           version: npm run release:version
-          token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     name: publish
