@@ -3,10 +3,11 @@ import * as vscode from "vscode";
 import { disableAutoTriggerForWorkspace, getSettings } from "./config";
 import { extractContextFromDocument } from "./context";
 import {
-  CodexAuthError,
-  CodexCliMissingError,
-  CodexRequestError,
-  generateSuggestionsWithCodex
+  AiAuthError,
+  AiCliMissingError,
+  AiRequestError,
+  generateSuggestionsWithAi,
+  getAiProviderLabel
 } from "./codexClient";
 import { appendDirectionGuidance, hashText, renderPromptTemplate, toPromptVariables } from "./prompt";
 import { findPlaceholderAtPosition } from "./placeholder";
@@ -47,6 +48,8 @@ export interface CompletionLookup {
   sourceStates: SourceGenerationStates;
   sourceFilter: SuggestionSourceFilter;
   aiAutoRun: boolean;
+  aiProviderName: string;
+  aiConfiguredModel?: string;
   thesaurusPrefix: string;
   aiPrefix: string;
   aiActiveAction?: "refresh" | "refreshWithPrompt";
@@ -136,6 +139,14 @@ export class SaurusController implements vscode.Disposable {
     return this.getSettings(document).autoTriggerDebounceMs;
   }
 
+  public getActivationSourceFilter(document: vscode.TextDocument): SuggestionSourceFilter {
+    return this.mapActivationModeToSourceFilter(this.getSettings(document).activationModeOnEnter);
+  }
+
+  public setSourceFilterForKey(key: string, sourceFilter: SuggestionSourceFilter): void {
+    this.sourceFilterByKey.set(key, sourceFilter);
+  }
+
   public getCompletionLookup(document: vscode.TextDocument, position: vscode.Position): CompletionLookup | undefined {
     const settings = this.getSettings(document);
     if (!settings.enabled || !settings.languages.includes(document.languageId)) {
@@ -165,8 +176,10 @@ export class SaurusController implements vscode.Disposable {
       match,
       entry,
       sourceStates: this.cache.getSourceStates(keyData.key),
-      sourceFilter: this.sourceFilterByKey.get(keyData.key) ?? "all",
+      sourceFilter: this.sourceFilterByKey.get(keyData.key) ?? this.getActivationSourceFilter(document),
       aiAutoRun: settings.aiAutoRun,
+      aiProviderName: getAiProviderLabel(settings.aiProvider),
+      aiConfiguredModel: settings.aiModel,
       thesaurusPrefix: settings.thesaurusPrefix,
       aiPrefix: settings.aiPrefix,
       aiActiveAction: this.aiActionByKey.get(keyData.key),
@@ -240,12 +253,10 @@ export class SaurusController implements vscode.Disposable {
     const suggestionKey = keyData.key;
     const documentUri = document.uri.toString();
     const existingEntry = this.cache.getEntry(suggestionKey);
-    const sourceFilter = options.sourceFilter ?? "all";
-    if (options.sourceFilter) {
-      this.sourceFilterByKey.set(suggestionKey, sourceFilter);
-    } else {
-      this.sourceFilterByKey.delete(suggestionKey);
-    }
+    const sourceFilter = options.sourceFilter
+      ?? this.sourceFilterByKey.get(suggestionKey)
+      ?? this.mapActivationModeToSourceFilter(settings.activationModeOnEnter);
+    this.setSourceFilterForKey(suggestionKey, sourceFilter);
 
     const shouldRunAi = sourceFilter !== "thesaurusOnly" && (options.forceDifferent || settings.aiAutoRun);
     const shouldRunThesaurus = sourceFilter !== "aiOnly" && settings.thesaurusEnabled;
@@ -312,11 +323,30 @@ export class SaurusController implements vscode.Disposable {
           ? (entryAtStart?.thesaurusLastResponseCached ?? true)
           : true;
         let lastAiPrompt: string | undefined = entryAtStart?.lastAiPrompt;
+        let lastAiModel: string | undefined = entryAtStart?.lastAiModel;
         let aiLoadedCount = entryAtStart?.aiLoadedCount ?? aiOptions.length;
         let aiLastAddedCount = 0;
         let aiLastResponseCached = !needsAi;
         const seenNormalized = new Set<string>(entryAtStart?.seenNormalized ?? []);
         const seenRaw = entryAtStart ? [...entryAtStart.seenRaw] : [];
+
+        const buildCurrentEntry = (): SuggestionCacheEntry => ({
+          thesaurusOptions,
+          aiOptions,
+          thesaurusInfo,
+          thesaurusLastResponseCached,
+          lastAiPrompt,
+          lastAiModel,
+          aiLoadedCount,
+          aiLastAddedCount,
+          aiLastResponseCached,
+          seenNormalized,
+          seenRaw,
+          createdAt: entryAtStart?.createdAt ?? Date.now(),
+          documentVersion: requestVersion,
+          documentUri,
+          lastAccessedAt: Date.now()
+        });
 
         addSuggestionsToSeen(thesaurusOptions, seenNormalized, seenRaw);
         addSuggestionsToSeen(aiOptions, seenNormalized, seenRaw);
@@ -340,8 +370,12 @@ export class SaurusController implements vscode.Disposable {
             };
             thesaurusLastResponseCached = false;
             addSuggestionsToSeen(deduped, seenNormalized, seenRaw);
+            this.cache.setEntry(suggestionKey, buildCurrentEntry());
             this.cache.setSourceState(suggestionKey, "thesaurus", "ready", documentUri);
             this.notifyCompletionItemsChanged();
+            if (needsAi) {
+              void vscode.commands.executeCommand("editor.action.triggerSuggest");
+            }
           } catch (error) {
             this.cache.setSourceState(suggestionKey, "thesaurus", "error", documentUri);
             this.notifyCompletionItemsChanged();
@@ -367,13 +401,15 @@ export class SaurusController implements vscode.Disposable {
           const renderedPrompt = renderPromptTemplate(settings.promptTemplate, toPromptVariables(request));
           const finalPrompt = appendDirectionGuidance(renderedPrompt, request.direction);
           lastAiPrompt = finalPrompt;
+          lastAiModel = settings.aiModel?.trim().length ? settings.aiModel.trim() : undefined;
 
           try {
-            const response = await generateSuggestionsWithCodex({
-              codexPath: settings.codexPath,
-              model: settings.codexModel,
-              reasoningEffort: settings.codexReasoningEffort,
-              timeoutMs: settings.codexTimeoutMs,
+            const response = await generateSuggestionsWithAi({
+              aiProvider: settings.aiProvider,
+              aiPath: settings.aiPath,
+              model: settings.aiModel,
+              reasoningEffort: settings.aiReasoningEffort,
+              timeoutMs: settings.aiTimeoutMs,
               workspaceDir: this.resolveWorkspaceDir(document),
               schemaPath: this.schemaPath,
               prompt: finalPrompt
@@ -394,6 +430,7 @@ export class SaurusController implements vscode.Disposable {
             aiOptions = [...aiOptions, ...nextOptions];
             aiLoadedCount = aiOptions.length;
             aiLastResponseCached = false;
+            this.cache.setEntry(suggestionKey, buildCurrentEntry());
             this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
             this.notifyCompletionItemsChanged();
           } catch (error) {
@@ -401,6 +438,7 @@ export class SaurusController implements vscode.Disposable {
             aiLastAddedCount = 0;
             aiLoadedCount = aiOptions.length;
             aiLastResponseCached = true;
+            this.cache.setEntry(suggestionKey, buildCurrentEntry());
             if (aiOptions.length > 0) {
               this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
             } else {
@@ -421,23 +459,7 @@ export class SaurusController implements vscode.Disposable {
           return;
         }
 
-        const nextEntry: SuggestionCacheEntry = {
-          thesaurusOptions,
-          aiOptions,
-          thesaurusInfo,
-          thesaurusLastResponseCached,
-          lastAiPrompt,
-          aiLoadedCount,
-          aiLastAddedCount,
-          aiLastResponseCached,
-          seenNormalized,
-          seenRaw,
-          createdAt: entryAtStart?.createdAt ?? Date.now(),
-          documentVersion: requestVersion,
-          documentUri,
-          lastAccessedAt: Date.now()
-        };
-
+        const nextEntry = buildCurrentEntry();
         this.cache.setEntry(suggestionKey, nextEntry);
         this.updateSourceStatesForEntry(suggestionKey, nextEntry, settings, documentUri);
         this.schedulePersistentCacheSave();
@@ -466,6 +488,7 @@ export class SaurusController implements vscode.Disposable {
     if (selection.isEmpty) {
       await this.generateForEditor(editor, {
         forceDifferent: false,
+        sourceFilter: "all",
         showNoPlaceholderWarning: true
       });
       await refreshSuggestWidget({ hard: true, repeat: 2 });
@@ -479,6 +502,7 @@ export class SaurusController implements vscode.Disposable {
 
     await this.generateForEditor(editor, {
       forceDifferent: false,
+      sourceFilter: "all",
       showNoPlaceholderWarning: false
     });
     await refreshSuggestWidget({ hard: true, repeat: 2 });
@@ -992,6 +1016,10 @@ export class SaurusController implements vscode.Disposable {
       contextAfter: context.contextAfter,
       open: settings.delimiters.open,
       close: settings.delimiters.close,
+      aiProvider: settings.aiProvider,
+      aiPath: settings.aiPath,
+      aiModel: settings.aiModel ?? "",
+      aiReasoningEffort: settings.aiReasoningEffort,
       promptTemplateHash
     });
 
@@ -1019,20 +1047,30 @@ export class SaurusController implements vscode.Disposable {
     this.notifyCompletionItemsChanged();
   }
 
+  private mapActivationModeToSourceFilter(mode: SaurusSettings["activationModeOnEnter"]): SuggestionSourceFilter {
+    if (mode === "ai") {
+      return "aiOnly";
+    }
+    if (mode === "thesaurus") {
+      return "thesaurusOnly";
+    }
+    return "all";
+  }
+
   private getErrorMessage(error: unknown): string {
     if (error instanceof ThesaurusConfigError || error instanceof ThesaurusRequestError) {
       return error.message;
     }
 
-    if (error instanceof CodexCliMissingError) {
-      return "Codex CLI was not found. Install Codex CLI or set saurus.codex.path.";
+    if (error instanceof AiCliMissingError) {
+      return error.message;
     }
 
-    if (error instanceof CodexAuthError) {
-      return "Codex CLI is not logged in. Run `codex login` and retry.";
+    if (error instanceof AiAuthError) {
+      return error.message;
     }
 
-    if (error instanceof CodexRequestError) {
+    if (error instanceof AiRequestError) {
       return error.message;
     }
 

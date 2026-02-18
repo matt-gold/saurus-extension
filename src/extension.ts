@@ -133,6 +133,9 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      const activationSourceFilter = controller.getActivationSourceFilter(document);
+      controller.setSourceFilterForKey(currentKey, activationSourceFilter);
+
       if (!controller.shouldAutoTrigger(document)) {
         return;
       }

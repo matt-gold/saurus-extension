@@ -11,7 +11,7 @@ It is easy to lose your voice in AI slop with other writing tools. Saurus is des
 - Configurable placeholder delimiters (default `{{` and `}}`)
 - Top heading row to exit and remove placeholder braces (`🦖  (Select a replacement)`)
 - Thesaurus suggestions (Merriam-Webster) shown first and cached per placeholder context (`📖`)
-- AI suggestions via Codex are optional (on-demand by default, auto-run configurable)
+- AI suggestions are optional (on-demand by default, auto-run configurable)
 - AI suggestions are prefixed with `✨`
 - Built for single words and short phrases to avoid generic long-form AI rewrites
 - Auto-trigger when cursor enters a placeholder
@@ -26,21 +26,35 @@ It is easy to lose your voice in AI slop with other writing tools. Saurus is des
 
 - VS Code 1.92+
 - Node.js 20+
-- Codex CLI installed and available on PATH (or configure `saurus.codex.path`)
-- Logged-in Codex CLI session
+- An AI CLI provider installed (`codex`, `copilot`, or `claude`)
+- AI CLI provider configured in `saurus.ai.provider` (optional overrides: `saurus.ai.path`, `saurus.ai.model`)
 - Merriam-Webster Thesaurus API key (`saurus.thesaurus.apiKey`)
 
-Check login:
+Check login (Codex provider):
 
 ```bash
 codex login status
 ```
 
-If needed:
+If needed (Codex provider):
 
 ```bash
 codex login
 ```
+
+Check login (Copilot via `gh` provider path):
+
+```bash
+gh auth status
+```
+
+Check Claude CLI:
+
+```bash
+claude --version
+```
+
+If Claude asks you to sign in, run `claude` once and complete the flow, or set `ANTHROPIC_API_KEY`.
 
 ## Development Setup
 
@@ -70,6 +84,7 @@ This produces a `.vsix` you can install locally.
 6. AI suggestions either auto-run (`saurus.ai.autoGenerateOnOpen: true`) or run on demand via `↻ Generate more`.
 7. To force additional AI options, choose `↻ Generate more`.
 8. To run a one-off directed generation, choose `↻ Generate w/ prompt` and enter a short instruction.
+9. Use `saurus.activation.modeOnEnter` to choose default entry mode (`hybrid`, `ai`, or `thesaurus`) when cursor enters/clicks a placeholder.
 
 Selected-text workflow:
 
@@ -105,6 +120,11 @@ All settings are under `saurus.*`.
 - `saurus.thesaurus.timeoutMs`
 - `saurus.thesaurus.maxSuggestions` (default `20`)
 - `saurus.ai.autoGenerateOnOpen`
+- `saurus.ai.provider` (`codex` | `copilot` | `claude`)
+- `saurus.ai.path` (optional; defaults by provider: `codex`, `gh`, `claude`)
+- `saurus.ai.model` (optional)
+- `saurus.ai.reasoningEffort`
+- `saurus.ai.timeoutMs`
 - `saurus.menu.thesaurusPrefix`
 - `saurus.menu.aiPrefix`
 - `saurus.cache.persistAcrossReload`
@@ -115,15 +135,16 @@ All settings are under `saurus.*`.
 - `saurus.placeholderHighlight.delimiterColor`
 - `saurus.placeholderHighlight.textColor`
 - `saurus.prompt.template`
+- `saurus.activation.modeOnEnter` (`hybrid` | `ai` | `thesaurus`, default `hybrid`)
 - `saurus.suggestions.count`
 - `saurus.autoTrigger.onCursorEnter`
 - `saurus.autoTrigger.debounceMs`
 - `saurus.context.charsBefore`
 - `saurus.context.charsAfter`
-- `saurus.codex.path`
-- `saurus.codex.model` (default `gpt-5.3-codex`)
-- `saurus.codex.reasoningEffort` (default `low`)
-- `saurus.codex.timeoutMs`
+- `saurus.codex.path` (deprecated alias of `saurus.ai.path`)
+- `saurus.codex.model` (deprecated alias of `saurus.ai.model`)
+- `saurus.codex.reasoningEffort` (deprecated alias of `saurus.ai.reasoningEffort`)
+- `saurus.codex.timeoutMs` (deprecated alias of `saurus.ai.timeoutMs`)
 
 Example workspace settings:
 
@@ -137,14 +158,28 @@ Example workspace settings:
   "saurus.thesaurus.timeoutMs": 10000,
   "saurus.thesaurus.maxSuggestions": 20,
   "saurus.ai.autoGenerateOnOpen": false,
+  "saurus.ai.provider": "codex",
+  "saurus.ai.path": "codex",
+  "saurus.ai.model": "gpt-5.3-codex",
+  "saurus.ai.reasoningEffort": "low",
+  "saurus.ai.timeoutMs": 20000,
+  "saurus.activation.modeOnEnter": "hybrid",
   "saurus.menu.thesaurusPrefix": "📖",
   "saurus.menu.aiPrefix": "✨",
   "saurus.cache.persistAcrossReload": false,
   "saurus.cache.persistTtlDays": 7,
   "saurus.suggestions.count": 10,
-  "saurus.codex.model": "gpt-5.3-codex",
-  "saurus.codex.reasoningEffort": "low",
   "saurus.prompt.template": "Give ${suggestionCount} literary replacements for ${placeholder}. Context: ${contextBefore} || ${contextAfter}. Avoid: ${avoidSuggestions}. Return JSON {\"suggestions\":[\"...\"]}."
+}
+```
+
+Claude provider example:
+
+```json
+{
+  "saurus.ai.provider": "claude",
+  "saurus.ai.path": "claude",
+  "saurus.ai.model": "sonnet"
 }
 ```
 
@@ -161,13 +196,13 @@ Example workspace settings:
 
 ## Troubleshooting
 
-- `Codex CLI was not found`: set `saurus.codex.path` or install Codex CLI.
-- `Codex CLI is not logged in`: run `codex login`.
+- `AI CLI was not found`: set `saurus.ai.path` or install the selected provider CLI.
+- `AI CLI is not logged in`: log in for your selected provider (Codex: `codex login`; Copilot via `gh`: `gh auth login`; Claude: run `claude` and complete login or set `ANTHROPIC_API_KEY`).
 - `Merriam-Webster thesaurus API key is missing`: set `saurus.thesaurus.apiKey`.
 - No new results on refresh: adjust prompt template or context window.
 
 ## Performance Tips
 
-- Keep `saurus.codex.reasoningEffort` at `low` (fastest reliable option on `gpt-5.3-codex`).
+- Keep `saurus.ai.reasoningEffort` at `low` for faster responses.
 - Lower `saurus.suggestions.count` if latency is high (default is `10`).
 - Reduce `saurus.context.charsBefore` / `saurus.context.charsAfter` if latency is high.

@@ -14,6 +14,7 @@ function makeInput(overrides: Partial<BuildProviderItemsInput> = {}): BuildProvi
     aiLoadedCount: 0,
     aiLastAddedCount: 0,
     aiLastResponseCached: true,
+    aiProviderName: "Codex",
     thesaurusProvider: "merriamWebster",
     thesaurusPrefix: "📖",
     aiPrefix: "✨",
@@ -223,4 +224,22 @@ test("uses configured source prefixes for labels", () => {
   const aiSuggestion = items.find((item) => item.kind === "suggestion" && item.source === "ai");
   assert.equal(thesaurusSuggestion?.label, "T: 1  quiet");
   assert.equal(aiSuggestion?.label, "A: 1  clear");
+});
+
+test("uses configured AI provider name in detail text", () => {
+  const items = buildProviderItems(makeInput({
+    sourceStates: { thesaurus: "ready", ai: "ready" },
+    hasEntry: true,
+    thesaurusOptions: ["quiet"],
+    aiOptions: ["clear"],
+    aiProviderName: "Claude",
+    aiCached: false
+  }));
+
+  const aiSuggestion = items.find((item) => item.kind === "suggestion" && item.source === "ai");
+  const refresh = items.find((item) => item.kind === "refresh");
+  const refreshWithPrompt = items.find((item) => item.kind === "refreshWithPrompt");
+  assert.equal(aiSuggestion?.detail, "From Claude CLI");
+  assert.equal(refresh?.detail, "with Claude CLI");
+  assert.equal(refreshWithPrompt?.detail, "with Claude CLI");
 });

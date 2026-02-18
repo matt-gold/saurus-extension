@@ -2,12 +2,26 @@ import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { CodexReasoningEffort, SuggestionResponse } from "./types";
+import { AiProviderKind, AiReasoningEffort, SuggestionResponse } from "./types";
+
+export interface AiExecOptions {
+  aiProvider: AiProviderKind;
+  aiPath: string;
+  model?: string;
+  reasoningEffort?: AiReasoningEffort;
+  timeoutMs: number;
+  workspaceDir: string;
+  schemaPath: string;
+}
+
+export interface AiRequestOptions extends AiExecOptions {
+  prompt: string;
+}
 
 export interface CodexExecOptions {
   codexPath: string;
   model?: string;
-  reasoningEffort?: CodexReasoningEffort;
+  reasoningEffort?: AiReasoningEffort;
   timeoutMs: number;
   workspaceDir: string;
   schemaPath: string;
@@ -23,50 +37,154 @@ interface CommandResult {
   stderr: string;
 }
 
-export class CodexCliMissingError extends Error {
-  public constructor(message = "Codex CLI not found. Install Codex CLI or update saurus.codex.path.") {
+function normalizeProviderLabel(provider: AiProviderKind): string {
+  switch (provider) {
+    case "codex":
+      return "Codex";
+    case "copilot":
+      return "Copilot";
+    case "claude":
+      return "Claude";
+    default:
+      return provider;
+  }
+}
+
+export function getAiProviderLabel(provider: AiProviderKind): string {
+  return normalizeProviderLabel(provider);
+}
+
+function isGhWrapperCommand(command: string): boolean {
+  const base = path.basename(command).toLowerCase();
+  return base === "gh" || base === "gh.exe";
+}
+
+export class AiCliMissingError extends Error {
+  public constructor(provider: AiProviderKind, message?: string) {
+    const label = normalizeProviderLabel(provider);
+    if (message) {
+      super(message);
+    } else if (provider === "copilot") {
+      super("Copilot CLI not found. Install GitHub Copilot CLI or set saurus.ai.path to gh.");
+    } else {
+      super(`${label} CLI not found. Install ${label} CLI or update saurus.ai.path.`);
+    }
+    this.name = "AiCliMissingError";
+  }
+}
+
+export class AiAuthError extends Error {
+  public constructor(provider: AiProviderKind, message?: string) {
+    const label = normalizeProviderLabel(provider);
+    if (message) {
+      super(message);
+    } else if (provider === "codex") {
+      super("Codex CLI is not authenticated. Run `codex login` and try again.");
+    } else if (provider === "copilot") {
+      super("Copilot CLI is not authenticated. Run `gh auth login` (or sign in to Copilot CLI) and try again.");
+    } else if (provider === "claude") {
+      super("Claude CLI is not authenticated. Start `claude` and complete login, or set `ANTHROPIC_API_KEY`.");
+    } else {
+      super(`${label} CLI is not authenticated. Log in and try again.`);
+    }
+    this.name = "AiAuthError";
+  }
+}
+
+export class AiRequestError extends Error {
+  public constructor(message: string) {
     super(message);
+    this.name = "AiRequestError";
+  }
+}
+
+export class CodexCliMissingError extends AiCliMissingError {
+  public constructor(message = "Codex CLI not found. Install Codex CLI or update saurus.ai.path.") {
+    super("codex", message);
     this.name = "CodexCliMissingError";
   }
 }
 
-export class CodexAuthError extends Error {
+export class CodexAuthError extends AiAuthError {
   public constructor(message = "Codex CLI is not authenticated. Run `codex login` and try again.") {
-    super(message);
+    super("codex", message);
     this.name = "CodexAuthError";
   }
 }
 
-export class CodexRequestError extends Error {
+export class CodexRequestError extends AiRequestError {
   public constructor(message: string) {
     super(message);
     this.name = "CodexRequestError";
   }
 }
 
-export function buildCodexExecArgs(options: CodexExecOptions, outputLastMessagePath: string): string[] {
-  const args = [
-    "exec",
-    "--ephemeral",
-    "--skip-git-repo-check",
-    "-C",
-    options.workspaceDir,
-    "--output-schema",
-    options.schemaPath,
-    "--output-last-message",
-    outputLastMessagePath
-  ];
+export function buildAiExecArgs(options: AiExecOptions, outputLastMessagePath: string, prompt: string): string[] {
+  if (options.aiProvider === "codex") {
+    const args = [
+      "exec",
+      "--ephemeral",
+      "--skip-git-repo-check",
+      "-C",
+      options.workspaceDir,
+      "--output-schema",
+      options.schemaPath,
+      "--output-last-message",
+      outputLastMessagePath
+    ];
 
-  if (options.reasoningEffort && options.reasoningEffort.trim().length > 0) {
-    args.push("-c", `model_reasoning_effort=${JSON.stringify(options.reasoningEffort.trim())}`);
+    if (options.reasoningEffort && options.reasoningEffort.trim().length > 0) {
+      args.push("-c", `model_reasoning_effort=${JSON.stringify(options.reasoningEffort.trim())}`);
+    }
+
+    if (options.model && options.model.trim().length > 0) {
+      args.push("--model", options.model.trim());
+    }
+
+    args.push("-");
+    return args;
   }
 
+  if (options.aiProvider === "copilot") {
+    const args = isGhWrapperCommand(options.aiPath)
+      ? ["copilot", "--"]
+      : [];
+
+    if (options.model && options.model.trim().length > 0) {
+      args.push("--model", options.model.trim());
+    }
+    args.push("-s", "-p", prompt);
+    return args;
+  }
+
+  const args: string[] = [];
   if (options.model && options.model.trim().length > 0) {
     args.push("--model", options.model.trim());
   }
-
-  args.push("-");
+  args.push("-p", prompt);
   return args;
+}
+
+export function buildAiLoginStatusArgs(provider: AiProviderKind, aiPath?: string): string[] | undefined {
+  if (provider === "codex") {
+    return ["login", "status"];
+  }
+  if (provider === "copilot" && aiPath && isGhWrapperCommand(aiPath)) {
+    return ["auth", "status"];
+  }
+  return undefined;
+}
+
+export function buildCodexExecArgs(options: CodexExecOptions, outputLastMessagePath: string): string[] {
+  return buildAiExecArgs({
+    aiProvider: "codex",
+    aiPath: options.codexPath,
+    model: options.model,
+    reasoningEffort: options.reasoningEffort,
+    timeoutMs: options.timeoutMs,
+    workspaceDir: options.workspaceDir,
+    schemaPath: options.schemaPath
+  }, outputLastMessagePath, "");
 }
 
 export function buildCodexLoginStatusArgs(): string[] {
@@ -78,6 +196,7 @@ async function runCommand(
   args: string[],
   cwd: string,
   timeoutMs: number,
+  provider: AiProviderKind,
   input?: string
 ): Promise<CommandResult> {
   return new Promise<CommandResult>((resolve, reject) => {
@@ -99,7 +218,7 @@ async function runCommand(
     child.on("error", (error: NodeJS.ErrnoException) => {
       clearTimeout(timeoutHandle);
       if (error.code === "ENOENT") {
-        reject(new CodexCliMissingError());
+        reject(new AiCliMissingError(provider));
         return;
       }
 
@@ -121,7 +240,7 @@ async function runCommand(
     child.on("close", (code) => {
       clearTimeout(timeoutHandle);
       if (timedOut) {
-        reject(new CodexRequestError(`Codex request timed out after ${timeoutMs}ms.`));
+        reject(new AiRequestError(`${normalizeProviderLabel(provider)} request timed out after ${timeoutMs}ms.`));
         return;
       }
 
@@ -139,17 +258,27 @@ async function runCommand(
   });
 }
 
-function parseSuggestionResponse(raw: string): SuggestionResponse {
+function parseSuggestionJson(raw: string, provider: AiProviderKind): SuggestionResponse | undefined {
   let parsed: unknown;
 
   try {
     parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new CodexRequestError(`Invalid JSON returned by Codex CLI: ${(error as Error).message}`);
+  } catch {
+    return undefined;
+  }
+
+  if (Array.isArray(parsed)) {
+    const values = parsed
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    if (values.length > 0) {
+      return { suggestions: values };
+    }
   }
 
   if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { suggestions?: unknown }).suggestions)) {
-    throw new CodexRequestError("Codex response is missing a valid suggestions array.");
+    return undefined;
   }
 
   const suggestions = (parsed as { suggestions: unknown[] }).suggestions
@@ -158,53 +287,174 @@ function parseSuggestionResponse(raw: string): SuggestionResponse {
     .filter((value) => value.length > 0);
 
   if (suggestions.length === 0) {
-    throw new CodexRequestError("Codex returned no valid suggestions.");
+    throw new AiRequestError(`${normalizeProviderLabel(provider)} returned no valid suggestions.`);
   }
 
   return { suggestions };
 }
 
-function maybeMapToAuthError(stderr: string, stdout: string): Error | undefined {
-  const combined = `${stdout}\n${stderr}`.toLowerCase();
-  if (combined.includes("not authenticated") || combined.includes("login") || combined.includes("logged out")) {
-    return new CodexAuthError();
+function extractJsonCandidate(raw: string): string | undefined {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const object = raw.match(/\{[\s\S]*\}/);
+  if (object?.[0]) {
+    return object[0].trim();
+  }
+
+  const array = raw.match(/\[[\s\S]*\]/);
+  if (array?.[0]) {
+    return array[0].trim();
   }
 
   return undefined;
 }
 
-async function ensureCodexLoggedIn(options: CodexExecOptions): Promise<void> {
+function parseSuggestionResponse(raw: string, provider: AiProviderKind): SuggestionResponse {
+  const fromRaw = parseSuggestionJson(raw, provider);
+  if (fromRaw) {
+    return fromRaw;
+  }
+
+  const jsonCandidate = extractJsonCandidate(raw);
+  if (jsonCandidate) {
+    const fromCandidate = parseSuggestionJson(jsonCandidate, provider);
+    if (fromCandidate) {
+      return fromCandidate;
+    }
+  }
+
+  const unique = new Set<string>();
+  const lineSuggestions: string[] = [];
+  const lines = raw.split(/\r?\n/);
+  for (const line of lines) {
+    const candidate = line
+      .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "")
+      .trim();
+    if (candidate.length === 0) {
+      continue;
+    }
+    const normalized = candidate.toLowerCase();
+    if (unique.has(normalized)) {
+      continue;
+    }
+    unique.add(normalized);
+    lineSuggestions.push(candidate);
+  }
+
+  if (lineSuggestions.length > 0) {
+    return { suggestions: lineSuggestions };
+  }
+
+  throw new AiRequestError(`${normalizeProviderLabel(provider)} returned no valid suggestions.`);
+}
+
+function maybeMapToAuthError(provider: AiProviderKind, stderr: string, stdout: string): Error | undefined {
+  const combined = `${stdout}\n${stderr}`.toLowerCase();
+  const authPatterns = [
+    "not authenticated",
+    "login required",
+    "logged out",
+    "gh auth login",
+    "not logged in",
+    "please login",
+    "please log in",
+    "authentication failed",
+    "authentication_error",
+    "api key",
+    "anthropic_api_key",
+    "x-api-key",
+    "sign in",
+    "unauthorized"
+  ];
+  if (authPatterns.some((pattern) => combined.includes(pattern))) {
+    return new AiAuthError(provider);
+  }
+
+  return undefined;
+}
+
+async function ensureAiLoggedIn(options: AiExecOptions): Promise<void> {
+  const loginArgs = buildAiLoginStatusArgs(options.aiProvider, options.aiPath);
+  if (!loginArgs) {
+    return;
+  }
+
   const result = await runCommand(
-    options.codexPath,
-    buildCodexLoginStatusArgs(),
+    options.aiPath,
+    loginArgs,
     options.workspaceDir,
-    Math.min(10000, options.timeoutMs)
+    Math.min(10000, options.timeoutMs),
+    options.aiProvider
   );
 
-  const output = `${result.stdout}\n${result.stderr}`;
-  if (result.code !== 0 || !/logged in/i.test(output)) {
-    throw new CodexAuthError();
+  if (result.code !== 0) {
+    throw new AiAuthError(options.aiProvider);
+  }
+
+  if (options.aiProvider === "codex") {
+    const output = `${result.stdout}\n${result.stderr}`;
+    if (!/logged in/i.test(output)) {
+      throw new AiAuthError(options.aiProvider);
+    }
+    return;
+  }
+
+  if (options.aiProvider === "copilot" && isGhWrapperCommand(options.aiPath)) {
+    const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
+    if (output.includes("not logged into any github hosts")) {
+      throw new AiAuthError(options.aiProvider);
+    }
+    return;
+  }
+}
+
+export async function generateSuggestionsWithAi(options: AiRequestOptions): Promise<SuggestionResponse> {
+  await ensureAiLoggedIn(options);
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "saurus-"));
+  const outputFile = path.join(tmpDir, "ai-last-message.json");
+
+  try {
+    const args = buildAiExecArgs(options, outputFile, options.prompt);
+    const stdinPrompt = options.aiProvider === "codex" ? options.prompt : undefined;
+    const result = await runCommand(
+      options.aiPath,
+      args,
+      options.workspaceDir,
+      options.timeoutMs,
+      options.aiProvider,
+      stdinPrompt
+    );
+
+    if (result.code !== 0) {
+      throw maybeMapToAuthError(options.aiProvider, result.stderr, result.stdout) ??
+        new AiRequestError(
+          `${normalizeProviderLabel(options.aiProvider)} request failed (exit ${result.code}): ${result.stderr || result.stdout}`
+        );
+    }
+
+    const raw = options.aiProvider === "codex"
+      ? await fs.readFile(outputFile, "utf8")
+      : result.stdout;
+
+    return parseSuggestionResponse(raw, options.aiProvider);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
   }
 }
 
 export async function generateSuggestionsWithCodex(options: CodexRequestOptions): Promise<SuggestionResponse> {
-  await ensureCodexLoggedIn(options);
-
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "saurus-"));
-  const outputFile = path.join(tmpDir, "codex-last-message.json");
-
-  try {
-    const args = buildCodexExecArgs(options, outputFile);
-    const result = await runCommand(options.codexPath, args, options.workspaceDir, options.timeoutMs, options.prompt);
-
-    if (result.code !== 0) {
-      throw maybeMapToAuthError(result.stderr, result.stdout) ??
-        new CodexRequestError(`Codex request failed (exit ${result.code}): ${result.stderr || result.stdout}`);
-    }
-
-    const raw = await fs.readFile(outputFile, "utf8");
-    return parseSuggestionResponse(raw);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  return generateSuggestionsWithAi({
+    aiProvider: "codex",
+    aiPath: options.codexPath,
+    model: options.model,
+    reasoningEffort: options.reasoningEffort,
+    timeoutMs: options.timeoutMs,
+    workspaceDir: options.workspaceDir,
+    schemaPath: options.schemaPath,
+    prompt: options.prompt
+  });
 }

@@ -2,7 +2,7 @@
   "name": "saurus-extension",
   "displayName": "Saurus",
   "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
-  "version": "0.1.36",
+  "version": "0.1.43",
   "icon": "assets/icon.png",
   "publisher": "mattgold",
   "license": "UNLICENSED",
@@ -140,6 +140,44 @@
           "markdownDeprecationMessage": "Deprecated: use `saurus.ai.autoGenerateOnOpen`.",
           "description": "Deprecated alias for auto-generating AI suggestions on placeholder open."
         },
+        "saurus.ai.provider": {
+          "type": "string",
+          "default": "codex",
+          "enum": [
+            "codex",
+            "copilot",
+            "claude"
+          ],
+          "description": "AI CLI provider used for suggestion generation."
+        },
+        "saurus.ai.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the selected AI CLI executable. Leave empty to use provider defaults (codex, gh, claude)."
+        },
+        "saurus.ai.model": {
+          "type": "string",
+          "default": "",
+          "description": "Optional model name passed to the selected AI CLI provider."
+        },
+        "saurus.ai.reasoningEffort": {
+          "type": "string",
+          "default": "low",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "description": "AI reasoning effort. Lower effort is usually faster."
+        },
+        "saurus.ai.timeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 1000,
+          "description": "Timeout for AI CLI requests in milliseconds."
+        },
         "saurus.menu.thesaurusPrefix": {
           "type": "string",
           "default": "📖",
@@ -191,7 +229,17 @@
           "type": "string",
           "scope": "window",
           "default": "You are helping with literary prose revision. Provide ${suggestionCount} replacement options for the placeholder.\n\nReturn valid JSON only with this shape: {\\\"suggestions\\\":[\\\"...\\\"]}.\nKeep options concise and stylistically consistent with nearby prose.\nDo not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).\n\nPlaceholder text:\n${placeholder}\n\nContext before:\n${contextBefore}\n\nContext after:\n${contextAfter}\n\nAvoid suggestions:\n${avoidSuggestions}\n\nAdditional direction (optional):\n${direction}\n",
-          "description": "Prompt template used for Codex generation. Supports ${placeholder}, ${contextBefore}, ${contextAfter}, ${suggestionCount}, ${avoidSuggestions}, ${direction}, ${fileName}, ${languageId}."
+          "description": "Prompt template used for AI generation. Supports ${placeholder}, ${contextBefore}, ${contextAfter}, ${suggestionCount}, ${avoidSuggestions}, ${direction}, ${fileName}, ${languageId}."
+        },
+        "saurus.activation.modeOnEnter": {
+          "type": "string",
+          "default": "hybrid",
+          "enum": [
+            "hybrid",
+            "ai",
+            "thesaurus"
+          ],
+          "description": "Default suggestion mode when cursor enters/clicks into a placeholder. 'hybrid' shows both sources, 'ai' shows AI only, 'thesaurus' shows thesaurus only."
         },
         "saurus.suggestions.count": {
           "type": "number",
@@ -226,12 +274,14 @@
         "saurus.codex.path": {
           "type": "string",
           "default": "codex",
-          "description": "Path to codex CLI executable."
+          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.path`.",
+          "description": "Deprecated alias for AI CLI path."
         },
         "saurus.codex.model": {
           "type": "string",
           "default": "gpt-5.3-codex",
-          "description": "Codex model to use for placeholder suggestions."
+          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.model`.",
+          "description": "Deprecated alias for AI model."
         },
         "saurus.codex.reasoningEffort": {
           "type": "string",
@@ -243,13 +293,15 @@
             "high",
             "xhigh"
           ],
-          "description": "Codex reasoning effort. Lower effort is usually faster."
+          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.reasoningEffort`.",
+          "description": "Deprecated alias for AI reasoning effort."
         },
         "saurus.codex.timeoutMs": {
           "type": "number",
           "default": 20000,
           "minimum": 1000,
-          "description": "Timeout for codex CLI requests in milliseconds."
+          "markdownDeprecationMessage": "Deprecated: use `saurus.ai.timeoutMs`.",
+          "description": "Deprecated alias for AI request timeout."
         }
       }
     },

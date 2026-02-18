@@ -47,14 +47,20 @@ function buildThesaurusDocumentation(info?: ThesaurusLookupInfo): vscode.Markdow
   return doc;
 }
 
-function buildAiDocumentation(prompt?: string): vscode.MarkdownString {
+function buildAiDocumentation(prompt?: string, model?: string, providerName?: string): vscode.MarkdownString {
   const doc = new vscode.MarkdownString();
   doc.isTrusted = false;
   doc.supportHtml = false;
 
   doc.appendMarkdown("**AI Prompt Context**\n\n");
   doc.appendMarkdown("- Prompt setting key: `saurus.prompt.template`\n");
+  doc.appendMarkdown("- Model setting key: `saurus.ai.model`\n");
   doc.appendMarkdown("- Edit it in Workspace/User Settings to change AI generation behavior.\n");
+  if (model && model.trim().length > 0) {
+    doc.appendMarkdown(`- Model used: \`${model.trim()}\`\n`);
+  } else {
+    doc.appendMarkdown(`- Model used: ${providerName ?? "Provider"} default (set \`saurus.ai.model\` to override)\n`);
+  }
 
   if (!prompt || prompt.trim().length === 0) {
     doc.appendMarkdown("\n_No AI prompt has been run for this placeholder yet._\n");
@@ -93,6 +99,7 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
       aiLoadedCount: lookup.entry?.aiLoadedCount ?? (lookup.entry?.aiOptions.length ?? 0),
       aiLastAddedCount: lookup.entry?.aiLastAddedCount ?? 0,
       aiLastResponseCached: lookup.entry?.aiLastResponseCached ?? true,
+      aiProviderName: lookup.aiProviderName,
       thesaurusProvider: lookup.thesaurusProvider,
       thesaurusPrefix: lookup.thesaurusPrefix,
       aiPrefix: lookup.aiPrefix,
@@ -117,7 +124,11 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
       if (menuItem.source === "thesaurus") {
         item.documentation = buildThesaurusDocumentation(lookup.entry?.thesaurusInfo);
       } else if (menuItem.source === "ai") {
-        item.documentation = buildAiDocumentation(lookup.entry?.lastAiPrompt);
+        item.documentation = buildAiDocumentation(
+          lookup.entry?.lastAiPrompt,
+          lookup.entry?.lastAiModel ?? lookup.aiConfiguredModel,
+          lookup.aiProviderName
+        );
       }
 
       if (menuItem.kind === "heading") {

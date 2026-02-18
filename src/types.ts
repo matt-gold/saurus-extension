@@ -1,9 +1,12 @@
 import * as vscode from "vscode";
 
 export type GenerationState = "idle" | "generating" | "ready" | "error";
-export type CodexReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type AiReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type CodexReasoningEffort = AiReasoningEffort;
+export type AiProviderKind = "codex" | "copilot" | "claude";
 export type SuggestionSource = "thesaurus" | "ai";
 export type SuggestionSourceFilter = "all" | "aiOnly" | "thesaurusOnly";
+export type ActivationMode = "hybrid" | "ai" | "thesaurus";
 export type ThesaurusProviderKind = "merriamWebster";
 
 export interface SourceGenerationStates {
@@ -21,15 +24,17 @@ export interface SaurusSettings {
   languages: string[];
   delimiters: DelimiterPair;
   promptTemplate: string;
+  activationModeOnEnter: ActivationMode;
   suggestionCount: number;
   autoTriggerOnCursorEnter: boolean;
   autoTriggerDebounceMs: number;
   contextCharsBefore: number;
   contextCharsAfter: number;
-  codexPath: string;
-  codexModel?: string;
-  codexReasoningEffort: CodexReasoningEffort;
-  codexTimeoutMs: number;
+  aiProvider: AiProviderKind;
+  aiPath: string;
+  aiModel?: string;
+  aiReasoningEffort: AiReasoningEffort;
+  aiTimeoutMs: number;
   aiAutoRun: boolean;
   thesaurusPrefix: string;
   aiPrefix: string;
@@ -59,6 +64,7 @@ export interface SuggestionCacheEntry {
   thesaurusInfo?: ThesaurusLookupInfo;
   thesaurusLastResponseCached: boolean;
   lastAiPrompt?: string;
+  lastAiModel?: string;
   aiLoadedCount: number;
   aiLastAddedCount: number;
   aiLastResponseCached: boolean;

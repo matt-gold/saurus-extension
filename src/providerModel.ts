@@ -24,6 +24,7 @@ export interface BuildProviderItemsInput {
   aiLoadedCount: number;
   aiLastAddedCount: number;
   aiLastResponseCached: boolean;
+  aiProviderName: string;
   thesaurusProvider: string;
   thesaurusPrefix: string;
   aiPrefix: string;
@@ -120,14 +121,16 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
   }
 
   if (showAi) {
-    const aiSuggestionDetail = input.aiCached ? "From Codex cache" : "From Codex CLI";
+    const aiSuggestionDetail = input.aiCached
+      ? `From ${input.aiProviderName} cache`
+      : `From ${input.aiProviderName} CLI`;
     if (input.sourceStates.ai === "generating") {
       items.push({
         kind: "loading",
         source: "ai",
         label: withPrefix(input.aiPrefix, "$(loading~spin) Generating AI suggestions..."),
         insertText: "",
-        detail: "Saurus is requesting options from Codex",
+        detail: `Saurus is requesting options from ${input.aiProviderName} CLI`,
         sortText: "0200"
       });
     }
@@ -152,8 +155,8 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
         : "↻ Generate more",
       insertText: input.placeholderRawText,
       detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? "Getting more AI options from Codex"
-        : "with Codex CLI",
+        ? `Getting more AI options from ${input.aiProviderName}`
+        : `with ${input.aiProviderName} CLI`,
       sortText: "9900",
       disabled: input.sourceStates.ai === "generating"
     });
@@ -166,7 +169,7 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       insertText: input.placeholderRawText,
       detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
         ? "Generating with your custom direction"
-        : "with Codex CLI",
+        : `with ${input.aiProviderName} CLI`,
       sortText: "9901",
       disabled: input.sourceStates.ai === "generating"
     });

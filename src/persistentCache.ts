@@ -9,6 +9,7 @@ interface PersistedSuggestionCacheEntryV1 {
   thesaurusInfo?: SuggestionCacheEntry["thesaurusInfo"];
   thesaurusLastResponseCached?: boolean;
   lastAiPrompt?: string;
+  lastAiModel?: string;
   aiLoadedCount?: number;
   aiLastAddedCount?: number;
   aiLastResponseCached?: boolean;
@@ -38,6 +39,7 @@ export function serializeEntry(entry: SuggestionCacheEntry): PersistedSuggestion
     thesaurusInfo: entry.thesaurusInfo,
     thesaurusLastResponseCached: entry.thesaurusLastResponseCached,
     lastAiPrompt: entry.lastAiPrompt,
+    lastAiModel: entry.lastAiModel,
     aiLoadedCount: entry.aiLoadedCount,
     aiLastAddedCount: entry.aiLastAddedCount,
     aiLastResponseCached: entry.aiLastResponseCached,
@@ -64,6 +66,7 @@ export function deserializeEntry(value: PersistedSuggestionCacheEntryV1): Sugges
       ? value.thesaurusLastResponseCached
       : true,
     lastAiPrompt: typeof value.lastAiPrompt === "string" ? value.lastAiPrompt : undefined,
+    lastAiModel: typeof value.lastAiModel === "string" ? value.lastAiModel : undefined,
     aiLoadedCount: typeof value.aiLoadedCount === "number" ? value.aiLoadedCount : aiOptions.length,
     aiLastAddedCount: typeof value.aiLastAddedCount === "number" ? value.aiLastAddedCount : 0,
     aiLastResponseCached: typeof value.aiLastResponseCached === "boolean" ? value.aiLastResponseCached : true,
