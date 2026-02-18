@@ -85,10 +85,17 @@ Saurus uses a minimal GitHub Actions pipeline:
   - `npm run package`
   - uploads `.vsix` artifact
 - `Release` (`.github/workflows/release.yml`) runs only after `CI` succeeds on a `main` push:
-  - runs Release Please to open/update release PRs
-  - after release PR merge, builds/tests/packages again
+  - runs `changesets/action` to open/update the `Version Packages` PR when pending `.changeset/*.md` files exist
+  - when there are no pending changesets, computes the release tag (`saurus-extension-vX.Y.Z`) from `package.json`
+  - skips publish if that tag already exists
+  - otherwise builds/tests/packages again
   - uploads VSIX to GitHub Release
   - publishes to VS Marketplace
+
+Release authoring:
+
+- Feature/fix PRs should include a `.changeset/*.md` file (`npm run changeset`) unless the change should not affect version/changelog.
+- Install the official [changeset-bot GitHub App](https://github.com/apps/changeset-bot) on this repo so PRs missing changesets are flagged automatically.
 
 Required GitHub secret:
 
@@ -99,12 +106,6 @@ Branch protection recommendation:
 - protect `main`
 - require PRs
 - require status check: `ci`
-
-Conventional commits are recommended (not enforced) for better semver/changelog quality:
-
-- `feat:` -> minor
-- `fix:` -> patch
-- `BREAKING CHANGE` or `!` -> major
 
 ## Usage
 
