@@ -2,9 +2,9 @@
   "name": "saurus-extension",
   "displayName": "Saurus",
   "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "icon": "assets/icon.png",
-  "publisher": "mattgold",
+  "publisher": "matt-gold",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
