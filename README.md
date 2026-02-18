@@ -84,7 +84,7 @@ Saurus uses a minimal GitHub Actions pipeline:
   - `npm test`
   - `npm run package`
   - uploads `.vsix` artifact
-- `Release` (`.github/workflows/release.yml`) runs on push to `main`:
+- `Release` (`.github/workflows/release.yml`) runs only after `CI` succeeds on a `main` push:
   - runs Release Please to open/update release PRs
   - after release PR merge, builds/tests/packages again
   - uploads VSIX to GitHub Release
