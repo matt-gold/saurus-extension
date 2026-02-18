@@ -4,57 +4,106 @@
 
 It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
 
-It is easy to lose your voice in AI slop with other writing tools. Saurus is designed to keep you honest and in the flow.
+## Key Workflows
+
+These are the primary workflows:
+
+- As you write, leave placeholders and come back later, for example: `I came, I saw, I {{took over}}`. Placeholders are highlighted, and placing the cursor inside one opens the Saurus suggestions window.
+- `cmd+shift+s` / `ctrl+shift+s`: wrap selected text in delimiters and open suggestions
+- `cmd+shift+a` / `ctrl+shift+a`: AI-only suggestions for the current placeholder (also wraps selection if needed)
+- `cmd+shift+z` / `ctrl+shift+z`: thesaurus-only suggestions for the current placeholder (also wraps selection if needed)
+- `Esc` (with suggest menu open): close suggestions and remove placeholder delimiters
 
 ## Features
 
-- Configurable placeholder delimiters (default `{{` and `}}`)
-- Top heading row to exit and remove placeholder braces (`🦖  (Select a replacement)`)
-- Thesaurus suggestions (Merriam-Webster) shown first and cached per placeholder context (`📖`)
-- AI suggestions are optional (on-demand by default, auto-run configurable)
-- AI suggestions are prefixed with `✨`
-- Built for single words and short phrases to avoid generic long-form AI rewrites
-- Auto-trigger when cursor enters a placeholder
-- Manual commands for generate and novelty refresh
-- In-popover actions: `↻ Generate more` and `↻ Generate w/ prompt`
-- Workspace-configurable prompt template
-- Cache with force refresh that avoids previously shown options
-- Optional persistent cache across VS Code reloads with TTL pruning
-- Color-coded placeholder highlighting in the editor
+- Thesaurus-first suggestions (Merriam-Webster) with AI as optional augmentation
+- Works best for single words and short phrases to preserve voice and avoid paragraph-level slop
+- Keyboard-first workflow for quick replacement without leaving the editor
+- Multiple AI provider support (`codex`, `copilot`, `claude`)
+- Configurable delimiters, language activation, and prompt template behavior
+- Smart caching for faster repeat lookups, with optional persistence across reloads
+- Visual placeholder highlighting so unfinished spots are easy to find
+
+## Supported Files
+
+- By default, Saurus runs in `markdown` and `plaintext`.
+- You can add other text-like language IDs via `saurus.languages`.
+- If a language is not in `saurus.languages`, Saurus stays inactive.
 
 ## Requirements
 
 - VS Code 1.92+
 - Node.js 20+
-- An AI CLI provider installed (`codex`, `copilot`, or `claude`)
-- AI CLI provider configured in `saurus.ai.provider` (optional overrides: `saurus.ai.path`, `saurus.ai.model`)
-- Merriam-Webster Thesaurus API key (`saurus.thesaurus.apiKey`)
 
-Check login (Codex provider):
+## Provider Setup
+
+### Thesaurus (Merriam-Webster)
+
+Required settings:
+
+```json
+{
+  "saurus.thesaurus.enabled": true,
+  "saurus.thesaurus.provider": "merriamWebster",
+  "saurus.thesaurus.apiKey": "YOUR_MW_API_KEY"
+}
+```
+
+### AI Provider: Codex CLI
+
+Recommended settings:
+
+```json
+{
+  "saurus.ai.provider": "codex",
+  "saurus.ai.path": "codex",
+  "saurus.ai.model": "gpt-5.3-codex",
+  "saurus.ai.reasoningEffort": "low"
+}
+```
+
+Login check:
 
 ```bash
 codex login status
 ```
 
-If needed (Codex provider):
+### AI Provider: Copilot CLI
 
-```bash
-codex login
+Recommended settings:
+
+```json
+{
+  "saurus.ai.provider": "copilot",
+  "saurus.ai.path": "gh",
+  "saurus.ai.autoGenerateOnOpen": false
+}
 ```
 
-Check login (Copilot via `gh` provider path):
+Login check:
 
 ```bash
 gh auth status
 ```
 
-Check Claude CLI:
+### AI Provider: Claude CLI
+
+Recommended settings:
+
+```json
+{
+  "saurus.ai.provider": "claude",
+  "saurus.ai.path": "claude",
+  "saurus.ai.model": "sonnet",
+  "saurus.ai.autoGenerateOnOpen": false
+}
+```
+
+Login check:
 
 ```bash
 claude --version
 ```
-
-If Claude asks you to sign in, run `claude` once and complete the flow, or set `ANTHROPIC_API_KEY`.
 
 ## Development Setup
 
@@ -74,58 +123,15 @@ npm run package
 
 This produces a `.vsix` you can install locally.
 
-## CI/CD
-
-Saurus uses a minimal GitHub Actions pipeline:
-
-- `CI` (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
-  - `npm ci`
-  - `npm run compile`
-  - `npm test`
-  - `npm run package`
-  - uploads `.vsix` artifact
-- `Release` (`.github/workflows/release.yml`) runs only after `CI` succeeds on a `main` push:
-  - runs `changesets/action` to open/update the `Version Packages` PR when pending `.changeset/*.md` files exist
-  - when there are no pending changesets, computes the release tag (`saurus-extension-vX.Y.Z`) from `package.json`
-  - skips publish if that tag already exists
-  - otherwise builds/tests/packages again
-  - uploads VSIX to GitHub Release
-  - publishes to VS Marketplace
-
-Release authoring:
-
-- Feature/fix PRs should include a `.changeset/*.md` file (`npm run changeset`) unless the change should not affect version/changelog.
-- Install the official [changeset-bot GitHub App](https://github.com/apps/changeset-bot) on this repo so PRs missing changesets are flagged automatically.
-
-Required GitHub secret:
-
-- `VSCE_PAT` (Visual Studio Marketplace publisher token)
-
-Branch protection recommendation:
-
-- protect `main`
-- require PRs
-- require status check: `ci`
-
 ## Usage
 
-1. Open a Markdown or plaintext file.
-2. Put cursor inside a placeholder, for example: `The bell felt {{mood}}.`
-3. Wait for auto suggestions or run command `Saurus: Generate Placeholder Suggestions`.
-4. Pick a replacement from the completion list, or use `🦖  (Select a replacement)` / `Esc` to exit and remove delimiters.
-5. Thesaurus suggestions appear first and are always cached.
-6. AI suggestions either auto-run (`saurus.ai.autoGenerateOnOpen: true`) or run on demand via `↻ Generate more`.
-7. To force additional AI options, choose `↻ Generate more`.
-8. To run a one-off directed generation, choose `↻ Generate w/ prompt` and enter a short instruction.
-9. Use `saurus.activation.modeOnEnter` to choose default entry mode (`hybrid`, `ai`, or `thesaurus`) when cursor enters/clicks a placeholder.
-
-Selected-text workflow:
-
-1. Select text you want alternatives for.
-2. Press `cmd+shift+s` (macOS) or `ctrl+shift+s` (Windows/Linux).
-3. Saurus wraps the selection in configured delimiters and opens the autocomplete popover.
-4. Pick a replacement from the popover, or choose `↻ Generate more` to append more suggestions.
-5. Inside a placeholder, press `cmd+shift+a` / `ctrl+shift+a` for AI-only view, or `cmd+shift+z` / `ctrl+shift+z` for thesaurus-only view.
+1. Open a supported file type (default: Markdown or plaintext).
+2. Select a word or short phrase.
+3. Press `cmd+shift+s` / `ctrl+shift+s`.
+4. Pick a replacement from the popover.
+5. Use `cmd+shift+a` for AI-only or `cmd+shift+z` for thesaurus-only as needed.
+6. Use `↻ Generate more` to append more AI options.
+7. Use `↻ Generate w/ prompt` for a one-off directed AI run.
 
 ## Commands
 
@@ -202,16 +208,6 @@ Example workspace settings:
 }
 ```
 
-Claude provider example:
-
-```json
-{
-  "saurus.ai.provider": "claude",
-  "saurus.ai.path": "claude",
-  "saurus.ai.model": "sonnet"
-}
-```
-
 ## Prompt Variables
 
 - `${placeholder}`
@@ -239,3 +235,36 @@ Claude provider example:
 Claude note:
 - `saurus.ai.reasoningEffort` is applied for Claude via environment variables (`CLAUDE_CODE_EFFORT_LEVEL`; `none` maps to `MAX_THINKING_TOKENS=0`).
 - Claude Code currently documents effort levels for Opus 4.6.
+
+## CI/CD
+
+Saurus uses a minimal GitHub Actions pipeline:
+
+- `CI` (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
+  - `npm ci`
+  - `npm run compile`
+  - `npm test`
+  - `npm run package`
+  - uploads `.vsix` artifact
+- `Release` (`.github/workflows/release.yml`) runs only after `CI` succeeds on a `main` push:
+  - runs `changesets/action` to open/update the `Version Packages` PR when pending `.changeset/*.md` files exist
+  - when there are no pending changesets, computes the release tag (`saurus-extension-vX.Y.Z`) from `package.json`
+  - skips publish if that tag already exists
+  - otherwise builds/tests/packages again
+  - uploads VSIX to GitHub Release
+  - publishes to VS Marketplace
+
+Release authoring:
+
+- Feature/fix PRs should include a `.changeset/*.md` file (`npm run changeset`) unless the change should not affect version/changelog.
+- Install the official [changeset-bot GitHub App](https://github.com/apps/changeset-bot) on this repo so PRs missing changesets are flagged automatically.
+
+Required GitHub secret:
+
+- `VSCE_PAT` (Visual Studio Marketplace publisher token)
+
+Branch protection recommendation:
+
+- protect `main`
+- require PRs
+- require status check: `ci`
