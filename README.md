@@ -8,6 +8,7 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
 
 These are the primary workflow:
 
+- as you write, you can leave placeholders behind and come back to them later by wrapping text in the configurable delimeters, e.g. `I came, I saw, I {{took over}}`. Placeholders are highlighted and clicking into them will open the Saurus replacement window.
 - `cmd+shift+s` / `ctrl+shift+s`: wrap selected text in delimiters and open suggestions
 - `cmd+shift+a` / `ctrl+shift+a`: AI-only suggestions for the current placeholder (also wraps selection if needed)
 - `cmd+shift+z` / `ctrl+shift+z`: thesaurus-only suggestions for the current placeholder (also wraps selection if needed)
