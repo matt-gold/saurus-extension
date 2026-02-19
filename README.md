@@ -19,7 +19,7 @@ These are the primary workflows:
 - Thesaurus-first suggestions (Merriam-Webster) with AI as optional augmentation
 - Works best for single words and short phrases to preserve voice and avoid paragraph-level slop
 - Keyboard-first workflow for quick replacement without leaving the editor
-- Multiple AI provider support (`codex`, `copilot`, `claude`)
+- Multiple AI provider support (`copilotChat`, `copilot`, `codex`, `claude`)
 - Configurable delimiters, language activation, and prompt template behavior
 - Smart caching for faster repeat lookups, with optional persistence across reloads
 - Visual placeholder highlighting so unfinished spots are easy to find
@@ -48,6 +48,23 @@ Required settings:
   "saurus.thesaurus.apiKey": "YOUR_MW_API_KEY"
 }
 ```
+
+### AI Provider: Copilot Chat (Native, default)
+
+Recommended settings:
+
+```json
+{
+  "saurus.ai.provider": "copilotChat",
+  "saurus.ai.autoGenerateOnOpen": false
+}
+```
+
+Notes:
+
+- No external AI CLI is required for this provider.
+- `saurus.ai.path` is ignored when `saurus.ai.provider` is `copilotChat`.
+- If `saurus.ai.model` is set, Saurus uses it as a Copilot model hint (id/family), then falls back to any available Copilot model.
 
 ### AI Provider: Codex CLI
 
@@ -159,8 +176,8 @@ All settings are under `saurus.*`.
 - `saurus.thesaurus.timeoutMs`
 - `saurus.thesaurus.maxSuggestions` (default `20`)
 - `saurus.ai.autoGenerateOnOpen`
-- `saurus.ai.provider` (`codex` | `copilot` | `claude`)
-- `saurus.ai.path` (optional; defaults by provider: `codex`, `gh`, `claude`)
+- `saurus.ai.provider` (`copilotChat` | `codex` | `copilot` | `claude`)
+- `saurus.ai.path` (optional; ignored for `copilotChat`; defaults by provider: `""`, `codex`, `gh`, `claude`)
 - `saurus.ai.model` (optional)
 - `saurus.ai.reasoningEffort`
 - `saurus.ai.timeoutMs`
@@ -193,9 +210,8 @@ Example workspace settings:
   "saurus.thesaurus.timeoutMs": 10000,
   "saurus.thesaurus.maxSuggestions": 20,
   "saurus.ai.autoGenerateOnOpen": false,
-  "saurus.ai.provider": "codex",
-  "saurus.ai.path": "codex",
-  "saurus.ai.model": "gpt-5.3-codex",
+  "saurus.ai.provider": "copilotChat",
+  "saurus.ai.model": "",
   "saurus.ai.reasoningEffort": "low",
   "saurus.ai.timeoutMs": 20000,
   "saurus.activation.modeOnEnter": "hybrid",
@@ -221,8 +237,10 @@ Example workspace settings:
 
 ## Troubleshooting
 
-- `AI CLI was not found`: set `saurus.ai.path` or install the selected provider CLI.
-- `AI CLI is not logged in`: log in for your selected provider (Codex: `codex login`; Copilot via `gh`: `gh auth login`; Claude: run `claude` and complete login or set `ANTHROPIC_API_KEY`).
+- `Copilot Chat access has not been granted`: run a manual AI action once (for example `↻ Generate more` or `Saurus: Get More AI Options`) and approve access, or switch providers.
+- `No Copilot Chat models are available`: sign in to Copilot Chat in VS Code or switch to a CLI provider.
+- `AI CLI was not found`: set `saurus.ai.path` or install the selected CLI provider.
+- `AI CLI is not logged in`: log in for your selected CLI provider (Codex: `codex login`; Copilot via `gh`: `gh auth login`; Claude: run `claude` and complete login or set `ANTHROPIC_API_KEY`).
 - `Merriam-Webster thesaurus API key is missing`: set `saurus.thesaurus.apiKey`.
 - No new results on refresh: adjust prompt template or context window.
 

@@ -136,23 +136,24 @@
         },
         "saurus.ai.provider": {
           "type": "string",
-          "default": "codex",
+          "default": "copilotChat",
           "enum": [
+            "copilotChat",
             "codex",
             "copilot",
             "claude"
           ],
-          "description": "AI CLI provider used for suggestion generation."
+          "description": "AI provider used for suggestion generation. 'copilotChat' uses VS Code's built-in Copilot Chat API; the others use CLI tools."
         },
         "saurus.ai.path": {
           "type": "string",
           "default": "",
-          "description": "Path to the selected AI CLI executable. Leave empty to use provider defaults (codex, gh, claude)."
+          "description": "Path to the selected AI CLI executable. Ignored for 'copilotChat'. Leave empty to use provider defaults (codex, gh, claude)."
         },
         "saurus.ai.model": {
           "type": "string",
           "default": "",
-          "description": "Optional model name passed to the selected AI CLI provider."
+          "description": "Optional model name. For 'copilotChat' this is treated as an id/family hint; for CLI providers it is passed to the CLI."
         },
         "saurus.ai.reasoningEffort": {
           "type": "string",
@@ -170,7 +171,7 @@
           "type": "number",
           "default": 20000,
           "minimum": 1000,
-          "description": "Timeout for AI CLI requests in milliseconds."
+          "description": "Timeout for AI requests in milliseconds."
         },
         "saurus.menu.thesaurusPrefix": {
           "type": "string",

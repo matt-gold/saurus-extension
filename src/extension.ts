@@ -58,7 +58,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const generationPromise = controller.generateForEditor(activeEditor, {
       forceDifferent: false,
-      quietErrors: true
+      quietErrors: true,
+      userInitiated: false
     });
 
     await triggerSuggest();

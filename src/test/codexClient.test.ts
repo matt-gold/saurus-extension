@@ -90,7 +90,8 @@ test("buildAiLoginStatusArgs only applies to codex", () => {
 
 test("getAiProviderLabel maps providers to display names", () => {
   assert.equal(getAiProviderLabel("codex"), "Codex");
-  assert.equal(getAiProviderLabel("copilot"), "Copilot");
+  assert.equal(getAiProviderLabel("copilot"), "Copilot CLI");
+  assert.equal(getAiProviderLabel("copilotChat"), "Copilot Chat");
   assert.equal(getAiProviderLabel("claude"), "Claude");
 });
 

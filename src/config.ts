@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { ActivationMode, AiProviderKind, AiReasoningEffort, SaurusSettings, ThesaurusProviderKind } from "./types";
+import { ActivationMode, AiReasoningEffort, SaurusSettings, ThesaurusProviderKind } from "./types";
+import { DEFAULT_AI_PROVIDER, getDefaultAiPath, sanitizeAiProvider } from "./aiProvider";
 
 export const DEFAULT_PROMPT_TEMPLATE = `You are helping with literary prose revision. Provide ${"${suggestionCount}"} replacement options for the placeholder.
 
@@ -32,25 +33,18 @@ function sanitizeDelimiter(input: string, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
-const DEFAULT_AI_PROVIDER: AiProviderKind = "codex";
 const DEFAULT_REASONING_EFFORT: AiReasoningEffort = "low";
 const DEFAULT_ACTIVATION_MODE: ActivationMode = "hybrid";
 const DEFAULT_THESAURUS_PROVIDER: ThesaurusProviderKind = "merriamWebster";
 const DEFAULT_THESAURUS_PREFIX = "📖";
 const DEFAULT_AI_PREFIX = "✨";
 const REASONING_EFFORTS = new Set<AiReasoningEffort>(["none", "low", "medium", "high", "xhigh"]);
-const AI_PROVIDERS = new Set<AiProviderKind>(["codex", "copilot", "claude"]);
 const ACTIVATION_MODES = new Set<ActivationMode>(["hybrid", "ai", "thesaurus"]);
 const THESAURUS_PROVIDERS = new Set<ThesaurusProviderKind>(["merriamWebster"]);
 
 function sanitizeReasoningEffort(input: string): AiReasoningEffort {
   const normalized = input.trim().toLowerCase() as AiReasoningEffort;
   return REASONING_EFFORTS.has(normalized) ? normalized : DEFAULT_REASONING_EFFORT;
-}
-
-function sanitizeAiProvider(input: string): AiProviderKind {
-  const normalized = input.trim().toLowerCase() as AiProviderKind;
-  return AI_PROVIDERS.has(normalized) ? normalized : DEFAULT_AI_PROVIDER;
 }
 
 function sanitizeActivationMode(input: string): ActivationMode {
@@ -61,16 +55,6 @@ function sanitizeActivationMode(input: string): ActivationMode {
 function sanitizeThesaurusProvider(input: string): ThesaurusProviderKind {
   const normalized = input.trim() as ThesaurusProviderKind;
   return THESAURUS_PROVIDERS.has(normalized) ? normalized : DEFAULT_THESAURUS_PROVIDER;
-}
-
-function getDefaultAiPath(provider: AiProviderKind): string {
-  if (provider === "copilot") {
-    return "gh";
-  }
-  if (provider === "claude") {
-    return "claude";
-  }
-  return "codex";
 }
 
 export function getSettings(document?: vscode.TextDocument): SaurusSettings {

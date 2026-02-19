@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 
 export type GenerationState = "idle" | "generating" | "ready" | "error";
 export type AiReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
-export type AiProviderKind = "codex" | "copilot" | "claude";
+export type AiProviderKind = "copilotChat" | "codex" | "copilot" | "claude";
+export type CliAiProviderKind = Exclude<AiProviderKind, "copilotChat">;
 export type SuggestionSource = "thesaurus" | "ai";
 export type SuggestionSourceFilter = "all" | "aiOnly" | "thesaurusOnly";
 export type ActivationMode = "hybrid" | "ai" | "thesaurus";

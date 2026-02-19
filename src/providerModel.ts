@@ -123,14 +123,14 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
   if (showAi) {
     const aiSuggestionDetail = input.aiCached
       ? `From ${input.aiProviderName} cache`
-      : `From ${input.aiProviderName} CLI`;
+      : `From ${input.aiProviderName}`;
     if (input.sourceStates.ai === "generating") {
       items.push({
         kind: "loading",
         source: "ai",
         label: withPrefix(input.aiPrefix, "$(loading~spin) Generating AI suggestions..."),
         insertText: "",
-        detail: `Saurus is requesting options from ${input.aiProviderName} CLI`,
+        detail: `Saurus is requesting options from ${input.aiProviderName}`,
         sortText: "0200"
       });
     }
@@ -156,7 +156,7 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       insertText: input.placeholderRawText,
       detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
         ? `Getting more AI options from ${input.aiProviderName}`
-        : `with ${input.aiProviderName} CLI`,
+        : `with ${input.aiProviderName}`,
       sortText: "9900",
       disabled: input.sourceStates.ai === "generating"
     });
@@ -169,7 +169,7 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       insertText: input.placeholderRawText,
       detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
         ? "Generating with your custom direction"
-        : `with ${input.aiProviderName} CLI`,
+        : `with ${input.aiProviderName}`,
       sortText: "9901",
       disabled: input.sourceStates.ai === "generating"
     });

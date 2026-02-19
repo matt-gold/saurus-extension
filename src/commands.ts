@@ -6,16 +6,24 @@ import {
   AiAuthError,
   AiCliMissingError,
   AiRequestError,
-  generateSuggestionsWithAi,
-  getAiProviderLabel
+  generateSuggestionsWithAi
 } from "./codexClient";
+import { getAiProviderLabel } from "./aiProvider";
 import { appendDirectionGuidance, hashText, renderPromptTemplate, toPromptVariables } from "./prompt";
 import { findPlaceholderAtPosition } from "./placeholder";
 import { addSuggestionsToSeen, dedupeSuggestions } from "./normalize";
 import { SuggestionCache } from "./cache";
+import { canUseCopilotChatInBackground, generateSuggestionsWithCopilotChat } from "./copilotChatClient";
+import {
+  CopilotChatBlockedError,
+  CopilotChatConsentRequiredError,
+  CopilotChatRequestError,
+  CopilotChatUnavailableError
+} from "./copilotChatCore";
 import {
   PlaceholderMatch,
   SaurusSettings,
+  SuggestionResponse,
   SuggestionSourceFilter,
   SourceGenerationStates,
   SuggestionCacheEntry,
@@ -63,6 +71,7 @@ interface GenerateOptions {
   promptDirection?: string;
   showNoPlaceholderWarning?: boolean;
   quietErrors?: boolean;
+  userInitiated?: boolean;
 }
 
 interface RefreshSuggestOptions {
@@ -258,23 +267,30 @@ export class SaurusController implements vscode.Disposable {
       ?? this.mapActivationModeToSourceFilter(settings.activationModeOnEnter);
     this.setSourceFilterForKey(suggestionKey, sourceFilter);
 
+    const isUserInitiated = options.userInitiated ?? true;
     const shouldRunAi = sourceFilter !== "thesaurusOnly" && (options.forceDifferent || settings.aiAutoRun);
     const shouldRunThesaurus = sourceFilter !== "aiOnly" && settings.thesaurusEnabled;
+    let aiAllowedForThisRun = true;
+    if (shouldRunAi && settings.aiProvider === "copilotChat" && !isUserInitiated) {
+      aiAllowedForThisRun = await canUseCopilotChatInBackground(this.extensionContext, settings.aiModel);
+    }
     const needsThesaurus = shouldRunThesaurus && (!existingEntry || existingEntry.thesaurusOptions.length === 0);
-    const needsAi = shouldRunAi && (options.forceDifferent || !existingEntry || existingEntry.aiOptions.length === 0);
+    const needsAi = aiAllowedForThisRun && shouldRunAi && (options.forceDifferent || !existingEntry || existingEntry.aiOptions.length === 0);
 
-    if (!needsThesaurus && !needsAi && existingEntry) {
-      const cachedEntry: SuggestionCacheEntry = {
-        ...existingEntry,
-        thesaurusLastResponseCached: true,
-        aiLoadedCount: existingEntry.aiOptions.length,
-        aiLastAddedCount: 0,
-        aiLastResponseCached: true,
-        lastAccessedAt: Date.now()
-      };
-      this.cache.setEntry(suggestionKey, cachedEntry);
-      this.updateSourceStatesForEntry(suggestionKey, cachedEntry, settings, documentUri);
-      this.schedulePersistentCacheSave();
+    if (!needsThesaurus && !needsAi) {
+      if (existingEntry) {
+        const cachedEntry: SuggestionCacheEntry = {
+          ...existingEntry,
+          thesaurusLastResponseCached: true,
+          aiLoadedCount: existingEntry.aiOptions.length,
+          aiLastAddedCount: 0,
+          aiLastResponseCached: true,
+          lastAccessedAt: Date.now()
+        };
+        this.cache.setEntry(suggestionKey, cachedEntry);
+        this.updateSourceStatesForEntry(suggestionKey, cachedEntry, settings, documentUri);
+        this.schedulePersistentCacheSave();
+      }
       return;
     }
 
@@ -404,16 +420,12 @@ export class SaurusController implements vscode.Disposable {
           lastAiModel = settings.aiModel?.trim().length ? settings.aiModel.trim() : undefined;
 
           try {
-            const response = await generateSuggestionsWithAi({
-              aiProvider: settings.aiProvider,
-              aiPath: settings.aiPath,
-              model: settings.aiModel,
-              reasoningEffort: settings.aiReasoningEffort,
-              timeoutMs: settings.aiTimeoutMs,
-              workspaceDir: this.resolveWorkspaceDir(document),
-              schemaPath: this.schemaPath,
-              prompt: finalPrompt
-            });
+            const response = await this.generateAiSuggestions(
+              settings,
+              document,
+              finalPrompt,
+              isUserInitiated
+            );
 
             if (document.version !== requestVersion) {
               this.cache.setSourceState(suggestionKey, "thesaurus", "idle", documentUri);
@@ -489,7 +501,8 @@ export class SaurusController implements vscode.Disposable {
       await this.generateForEditor(editor, {
         forceDifferent: false,
         sourceFilter: "all",
-        showNoPlaceholderWarning: true
+        showNoPlaceholderWarning: true,
+        userInitiated: true
       });
       await refreshSuggestWidget({ hard: true, repeat: 2 });
       return;
@@ -503,7 +516,8 @@ export class SaurusController implements vscode.Disposable {
     await this.generateForEditor(editor, {
       forceDifferent: false,
       sourceFilter: "all",
-      showNoPlaceholderWarning: false
+      showNoPlaceholderWarning: false,
+      userInitiated: true
     });
     await refreshSuggestWidget({ hard: true, repeat: 2 });
   }
@@ -518,7 +532,8 @@ export class SaurusController implements vscode.Disposable {
 
         const generationPromise = this.generateForEditor(editor, {
           forceDifferent: false,
-          showNoPlaceholderWarning: true
+          showNoPlaceholderWarning: true,
+          userInitiated: true
         });
         const key = this.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
         if (key) {
@@ -566,7 +581,8 @@ export class SaurusController implements vscode.Disposable {
       const generationPromise = this.generateForEditor(editor, {
         forceDifferent: true,
         promptDirection,
-        showNoPlaceholderWarning: true
+        showNoPlaceholderWarning: true,
+        userInitiated: true
       });
       const key = this.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
       if (key) {
@@ -633,7 +649,8 @@ export class SaurusController implements vscode.Disposable {
       const generationPromise = this.generateForEditor(editor, {
         forceDifferent,
         sourceFilter,
-        showNoPlaceholderWarning: true
+        showNoPlaceholderWarning: true,
+        userInitiated: true
       });
       await refreshSuggestWidget({ repeat: 2 });
       await generationPromise;
@@ -940,6 +957,35 @@ export class SaurusController implements vscode.Disposable {
     }
   }
 
+  private async generateAiSuggestions(
+    settings: SaurusSettings,
+    document: vscode.TextDocument,
+    prompt: string,
+    userInitiated: boolean
+  ): Promise<SuggestionResponse> {
+    if (settings.aiProvider === "copilotChat") {
+      return generateSuggestionsWithCopilotChat({
+        model: settings.aiModel,
+        timeoutMs: settings.aiTimeoutMs,
+        prompt,
+        justification: userInitiated
+          ? "Saurus needs Copilot Chat to generate replacement suggestions for your placeholder."
+          : undefined
+      });
+    }
+
+    return generateSuggestionsWithAi({
+      aiProvider: settings.aiProvider,
+      aiPath: settings.aiPath,
+      model: settings.aiModel,
+      reasoningEffort: settings.aiReasoningEffort,
+      timeoutMs: settings.aiTimeoutMs,
+      workspaceDir: this.resolveWorkspaceDir(document),
+      schemaPath: this.schemaPath,
+      prompt
+    });
+  }
+
   private resolveWorkspaceDir(document: vscode.TextDocument): string {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
     if (workspaceFolder) {
@@ -1005,6 +1051,7 @@ export class SaurusController implements vscode.Disposable {
     );
 
     const promptTemplateHash = hashText(settings.promptTemplate);
+    const aiPathForKey = settings.aiProvider === "copilotChat" ? "" : settings.aiPath;
 
     const payload = JSON.stringify({
       uri: document.uri.toString(),
@@ -1017,7 +1064,7 @@ export class SaurusController implements vscode.Disposable {
       open: settings.delimiters.open,
       close: settings.delimiters.close,
       aiProvider: settings.aiProvider,
-      aiPath: settings.aiPath,
+      aiPath: aiPathForKey,
       aiModel: settings.aiModel ?? "",
       aiReasoningEffort: settings.aiReasoningEffort,
       promptTemplateHash
@@ -1071,6 +1118,15 @@ export class SaurusController implements vscode.Disposable {
     }
 
     if (error instanceof AiRequestError) {
+      return error.message;
+    }
+
+    if (
+      error instanceof CopilotChatUnavailableError ||
+      error instanceof CopilotChatConsentRequiredError ||
+      error instanceof CopilotChatBlockedError ||
+      error instanceof CopilotChatRequestError
+    ) {
       return error.message;
     }
 

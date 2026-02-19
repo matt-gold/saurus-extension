@@ -2,10 +2,12 @@ import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { AiProviderKind, AiReasoningEffort, SuggestionResponse } from "./types";
+import { getAiProviderLabel as getAiProviderDisplayLabel } from "./aiProvider";
+import { parseSuggestionResponse } from "./aiResponseParser";
+import { AiProviderKind, AiReasoningEffort, CliAiProviderKind, SuggestionResponse } from "./types";
 
 export interface AiExecOptions {
-  aiProvider: AiProviderKind;
+  aiProvider: CliAiProviderKind;
   aiPath: string;
   model?: string;
   reasoningEffort?: AiReasoningEffort;
@@ -26,21 +28,12 @@ interface CommandResult {
 
 type CommandEnvOverrides = Record<string, string>;
 
-function normalizeProviderLabel(provider: AiProviderKind): string {
-  switch (provider) {
-    case "codex":
-      return "Codex";
-    case "copilot":
-      return "Copilot";
-    case "claude":
-      return "Claude";
-    default:
-      return provider;
-  }
+export function getAiProviderLabel(provider: AiProviderKind): string {
+  return getAiProviderDisplayLabel(provider);
 }
 
-export function getAiProviderLabel(provider: AiProviderKind): string {
-  return normalizeProviderLabel(provider);
+function normalizeProviderLabel(provider: AiProviderKind): string {
+  return getAiProviderDisplayLabel(provider);
 }
 
 function isGhWrapperCommand(command: string): boolean {
@@ -49,7 +42,7 @@ function isGhWrapperCommand(command: string): boolean {
 }
 
 export class AiCliMissingError extends Error {
-  public constructor(provider: AiProviderKind, message?: string) {
+  public constructor(provider: CliAiProviderKind, message?: string) {
     const label = normalizeProviderLabel(provider);
     if (message) {
       super(message);
@@ -63,7 +56,7 @@ export class AiCliMissingError extends Error {
 }
 
 export class AiAuthError extends Error {
-  public constructor(provider: AiProviderKind, message?: string) {
+  public constructor(provider: CliAiProviderKind, message?: string) {
     const label = normalizeProviderLabel(provider);
     if (message) {
       super(message);
@@ -133,7 +126,7 @@ export function buildAiExecArgs(options: AiExecOptions, outputLastMessagePath: s
   return args;
 }
 
-export function buildAiLoginStatusArgs(provider: AiProviderKind, aiPath?: string): string[] | undefined {
+export function buildAiLoginStatusArgs(provider: CliAiProviderKind, aiPath?: string): string[] | undefined {
   if (provider === "codex") {
     return ["login", "status"];
   }
@@ -148,7 +141,7 @@ async function runCommand(
   args: string[],
   cwd: string,
   timeoutMs: number,
-  provider: AiProviderKind,
+  provider: CliAiProviderKind,
   input?: string,
   envOverrides?: CommandEnvOverrides
 ): Promise<CommandResult> {
@@ -214,100 +207,7 @@ async function runCommand(
   });
 }
 
-function parseSuggestionJson(raw: string, provider: AiProviderKind): SuggestionResponse | undefined {
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-
-  if (Array.isArray(parsed)) {
-    const values = parsed
-      .filter((value): value is string => typeof value === "string")
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-    if (values.length > 0) {
-      return { suggestions: values };
-    }
-  }
-
-  if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { suggestions?: unknown }).suggestions)) {
-    return undefined;
-  }
-
-  const suggestions = (parsed as { suggestions: unknown[] }).suggestions
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-
-  if (suggestions.length === 0) {
-    throw new AiRequestError(`${normalizeProviderLabel(provider)} returned no valid suggestions.`);
-  }
-
-  return { suggestions };
-}
-
-function extractJsonCandidate(raw: string): string | undefined {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced?.[1]) {
-    return fenced[1].trim();
-  }
-
-  const object = raw.match(/\{[\s\S]*\}/);
-  if (object?.[0]) {
-    return object[0].trim();
-  }
-
-  const array = raw.match(/\[[\s\S]*\]/);
-  if (array?.[0]) {
-    return array[0].trim();
-  }
-
-  return undefined;
-}
-
-function parseSuggestionResponse(raw: string, provider: AiProviderKind): SuggestionResponse {
-  const fromRaw = parseSuggestionJson(raw, provider);
-  if (fromRaw) {
-    return fromRaw;
-  }
-
-  const jsonCandidate = extractJsonCandidate(raw);
-  if (jsonCandidate) {
-    const fromCandidate = parseSuggestionJson(jsonCandidate, provider);
-    if (fromCandidate) {
-      return fromCandidate;
-    }
-  }
-
-  const unique = new Set<string>();
-  const lineSuggestions: string[] = [];
-  const lines = raw.split(/\r?\n/);
-  for (const line of lines) {
-    const candidate = line
-      .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "")
-      .trim();
-    if (candidate.length === 0) {
-      continue;
-    }
-    const normalized = candidate.toLowerCase();
-    if (unique.has(normalized)) {
-      continue;
-    }
-    unique.add(normalized);
-    lineSuggestions.push(candidate);
-  }
-
-  if (lineSuggestions.length > 0) {
-    return { suggestions: lineSuggestions };
-  }
-
-  throw new AiRequestError(`${normalizeProviderLabel(provider)} returned no valid suggestions.`);
-}
-
-function maybeMapToAuthError(provider: AiProviderKind, stderr: string, stdout: string): Error | undefined {
+function maybeMapToAuthError(provider: CliAiProviderKind, stderr: string, stdout: string): Error | undefined {
   const combined = `${stdout}\n${stderr}`.toLowerCase();
   const authPatterns = [
     "not authenticated",
@@ -428,7 +328,7 @@ export async function generateSuggestionsWithAi(options: AiRequestOptions): Prom
       ? await fs.readFile(outputFile, "utf8")
       : result.stdout;
 
-    return parseSuggestionResponse(raw, options.aiProvider);
+    return parseSuggestionResponse(raw, normalizeProviderLabel(options.aiProvider), (message) => new AiRequestError(message));
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

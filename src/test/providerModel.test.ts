@@ -50,15 +50,15 @@ test("renders heading row and prefixed source suggestions", () => {
   assert.equal(items[2].label, "📖 2  clear");
 
   assert.equal(items[3].label, "✨ 1  pellucid phrase");
-  assert.equal(items[3].detail, "From Codex CLI");
+  assert.equal(items[3].detail, "From Codex");
 
   assert.equal(items.at(-2)?.kind, "refresh");
   assert.equal(items.at(-2)?.label, "↻ Generate more");
-  assert.equal(items.at(-2)?.detail, "with Codex CLI");
+  assert.equal(items.at(-2)?.detail, "with Codex");
   assert.equal(items.at(-2)?.disabled, false);
   assert.equal(items.at(-1)?.kind, "refreshWithPrompt");
   assert.equal(items.at(-1)?.label, "↻ Generate w/ prompt");
-  assert.equal(items.at(-1)?.detail, "with Codex CLI");
+  assert.equal(items.at(-1)?.detail, "with Codex");
   assert.equal(items.at(-1)?.disabled, false);
 });
 
@@ -156,7 +156,7 @@ test("formats ai detail as only new when no cached results yet", () => {
 
   const aiSuggestion = items.find((item) => item.kind === "suggestion" && item.source === "ai");
   assert.ok(aiSuggestion);
-  assert.equal(aiSuggestion?.detail, "From Codex CLI");
+  assert.equal(aiSuggestion?.detail, "From Codex");
   assert.match(aiSuggestion?.label ?? "", /^✨ /);
 });
 
@@ -232,14 +232,14 @@ test("uses configured AI provider name in detail text", () => {
     hasEntry: true,
     thesaurusOptions: ["quiet"],
     aiOptions: ["clear"],
-    aiProviderName: "Claude",
+    aiProviderName: "Copilot Chat",
     aiCached: false
   }));
 
   const aiSuggestion = items.find((item) => item.kind === "suggestion" && item.source === "ai");
   const refresh = items.find((item) => item.kind === "refresh");
   const refreshWithPrompt = items.find((item) => item.kind === "refreshWithPrompt");
-  assert.equal(aiSuggestion?.detail, "From Claude CLI");
-  assert.equal(refresh?.detail, "with Claude CLI");
-  assert.equal(refreshWithPrompt?.detail, "with Claude CLI");
+  assert.equal(aiSuggestion?.detail, "From Copilot Chat");
+  assert.equal(refresh?.detail, "with Copilot Chat");
+  assert.equal(refreshWithPrompt?.detail, "with Copilot Chat");
 });
