@@ -1,6 +1,10 @@
-# Saurus
+# Saurus - VSCode Extension
 
-`Saurus` is an AI-second writing tool designed to keep you in the flow.
+<div align="center">
+  <img src="assets/icon.png" alt="Saurus logo" width="128" />
+</div>
+
+`Saurus` is an AI-second writing tool designed to keep you in the flow when writing with VSCode.
 
 It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
 
