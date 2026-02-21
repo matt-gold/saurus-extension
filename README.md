@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="assets/icon.png" alt="Saurus logo" width="128" />
+</div>
+
 # Saurus
 
 `Saurus` is an AI-second writing tool designed to keep you in the flow.
