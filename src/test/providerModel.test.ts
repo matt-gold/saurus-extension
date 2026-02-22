@@ -24,9 +24,12 @@ function makeInput(overrides: Partial<BuildProviderItemsInput> = {}): BuildProvi
   };
 }
 
-test("returns empty when no entry and all sources idle", () => {
+test("shows heading and AI actions when no entry and all sources idle", () => {
   const items = buildProviderItems(makeInput());
-  assert.equal(items.length, 0);
+  assert.equal(items[0]?.kind, "heading");
+  assert.equal(items.some((item) => item.kind === "refresh"), true);
+  assert.equal(items.some((item) => item.kind === "refreshWithPrompt"), true);
+  assert.equal(items.some((item) => item.kind === "empty"), false);
 });
 
 test("renders heading row and prefixed source suggestions", () => {

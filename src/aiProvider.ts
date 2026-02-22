@@ -2,6 +2,44 @@ import { AiProviderKind } from "./types";
 
 export const DEFAULT_AI_PROVIDER: AiProviderKind = "copilotChat";
 
+export interface AiProviderPreset {
+  kind: AiProviderKind;
+  quickPickLabel: string;
+  displayLabel: string;
+  defaultPath: string;
+}
+
+const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
+  {
+    kind: "copilotChat",
+    quickPickLabel: "Copilot Chat (default)",
+    displayLabel: "Copilot Chat",
+    defaultPath: ""
+  },
+  {
+    kind: "copilot",
+    quickPickLabel: "Copilot CLI",
+    displayLabel: "Copilot CLI",
+    defaultPath: "gh"
+  },
+  {
+    kind: "claude",
+    quickPickLabel: "Claude CLI",
+    displayLabel: "Claude",
+    defaultPath: "claude"
+  },
+  {
+    kind: "codex",
+    quickPickLabel: "Codex CLI",
+    displayLabel: "Codex",
+    defaultPath: "codex"
+  }
+] as const;
+
+function getPreset(provider: AiProviderKind): AiProviderPreset | undefined {
+  return AI_PROVIDER_PRESETS.find((preset) => preset.kind === provider);
+}
+
 const AI_PROVIDER_ALIASES: Record<string, AiProviderKind> = {
   copilotchat: "copilotChat",
   "copilot-chat": "copilotChat",
@@ -16,34 +54,17 @@ export function sanitizeAiProvider(input: string): AiProviderKind {
 }
 
 export function getDefaultAiPath(provider: AiProviderKind): string {
-  switch (provider) {
-    case "copilotChat":
-      return "";
-    case "copilot":
-      return "gh";
-    case "claude":
-      return "claude";
-    case "codex":
-    default:
-      return "codex";
-  }
+  return getPreset(provider)?.defaultPath ?? "codex";
 }
 
 export function getAiProviderLabel(provider: AiProviderKind): string {
-  switch (provider) {
-    case "copilotChat":
-      return "Copilot Chat";
-    case "copilot":
-      return "Copilot CLI";
-    case "claude":
-      return "Claude";
-    case "codex":
-      return "Codex";
-    default:
-      return provider;
-  }
+  return getPreset(provider)?.displayLabel ?? provider;
 }
 
 export function isCliAiProvider(provider: AiProviderKind): boolean {
   return provider !== "copilotChat";
+}
+
+export function listAiProviderPresets(): readonly AiProviderPreset[] {
+  return AI_PROVIDER_PRESETS;
 }

@@ -8,7 +8,10 @@ import {
   AiRequestError,
   generateSuggestionsWithAi
 } from "./codexClient";
-import { getAiProviderLabel } from "./aiProvider";
+import {
+  getAiProviderLabel,
+  listAiProviderPresets
+} from "./aiProvider";
 import { appendDirectionGuidance, hashText, renderPromptTemplate, toPromptVariables } from "./prompt";
 import { findPlaceholderAtPosition } from "./placeholder";
 import { addSuggestionsToSeen, dedupeSuggestions } from "./normalize";
@@ -100,6 +103,16 @@ async function refreshSuggestWidget(options: RefreshSuggestOptions = {}): Promis
   }
 }
 
+// VS Code occasionally leaves a freshly refreshed suggest list in a state where
+// accept closes the widget but the completion-item command does not run.
+// A trailing delayed hard reopen mirrors the manual "click out and back in"
+// recovery users observed, but keeps ordering/menu construction unchanged.
+async function refreshSuggestWidgetStable(): Promise<void> {
+  await refreshSuggestWidget({ hard: true, repeat: 1 });
+  await sleep(45);
+  await refreshSuggestWidget({ hard: true, repeat: 1 });
+}
+
 export class SaurusController implements vscode.Disposable {
   private readonly cache = new SuggestionCache();
   private readonly schemaPath: string;
@@ -132,6 +145,110 @@ export class SaurusController implements vscode.Disposable {
 
   public getSettings(document?: vscode.TextDocument): SaurusSettings {
     return getSettings(document);
+  }
+
+  private getConfigurationTarget(): vscode.ConfigurationTarget {
+    return vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+  }
+
+  private async configureThesaurusProvider(document?: vscode.TextDocument): Promise<"configured" | "disabled" | "cancelled"> {
+    const cfg = vscode.workspace.getConfiguration("saurus", document);
+    const selection = await vscode.window.showQuickPick<{ id: "enterKey" | "disable"; label: string; description: string }>(
+      [
+        {
+          id: "enterKey",
+          label: "Enter Merriam-Webster API Key",
+          description: "Enable thesaurus lookups with Merriam-Webster"
+        },
+        {
+          id: "disable",
+          label: "Disable Thesaurus",
+          description: "Turn off thesaurus suggestions for now"
+        }
+      ],
+      {
+        title: "Saurus: Configure Thesaurus Provider",
+        placeHolder: "Thesaurus requires a Merriam-Webster API key"
+      }
+    );
+
+    if (!selection) {
+      return "cancelled";
+    }
+
+    const target = this.getConfigurationTarget();
+    if (selection.id === "disable") {
+      await cfg.update("thesaurus.enabled", false, target);
+      void vscode.window.showInformationMessage("Saurus: thesaurus suggestions disabled.");
+      return "disabled";
+    }
+
+    const existingKey = cfg.get<string>("thesaurus.apiKey", "").trim();
+    const apiKey = await vscode.window.showInputBox({
+      title: "Saurus: Merriam-Webster API Key",
+      prompt: "Enter your Merriam-Webster thesaurus API key.",
+      placeHolder: "Merriam-Webster API key",
+      ignoreFocusOut: true,
+      password: true,
+      value: existingKey
+    });
+
+    if (apiKey === undefined) {
+      return "cancelled";
+    }
+
+    const trimmedKey = apiKey.trim();
+    if (trimmedKey.length === 0) {
+      void vscode.window.showInformationMessage("Saurus: API key cannot be empty.");
+      return "cancelled";
+    }
+
+    await cfg.update("thesaurus.provider", "merriamWebster", target);
+    await cfg.update("thesaurus.enabled", true, target);
+    await cfg.update("thesaurus.apiKey", trimmedKey, target);
+    void vscode.window.showInformationMessage("Saurus: Merriam-Webster API key saved.");
+    return "configured";
+  }
+
+  private async configureAiProvider(document?: vscode.TextDocument): Promise<void> {
+    const presets = listAiProviderPresets();
+    const cfg = vscode.workspace.getConfiguration("saurus", document);
+    const selection = await vscode.window.showQuickPick<{ providerKind: string; label: string; detail: string }>(
+      presets.map((preset) => {
+        const pathLabel = preset.defaultPath.length > 0 ? preset.defaultPath : "(ignored)";
+        return {
+          providerKind: preset.kind,
+          label: preset.quickPickLabel,
+          detail: `provider=${preset.kind}  path=${pathLabel}`
+        };
+      }),
+      {
+        title: "Saurus: Configure AI Provider",
+        placeHolder: "Choose the AI provider Saurus should use"
+      }
+    );
+
+    if (!selection) {
+      return;
+    }
+
+    const preset = presets.find((candidate) => candidate.kind === selection.providerKind);
+    if (!preset) {
+      return;
+    }
+
+    const target = this.getConfigurationTarget();
+    await cfg.update("ai.provider", preset.kind, target);
+    await cfg.update("ai.path", preset.defaultPath, target);
+    await cfg.update("ai.model", "", target);
+
+    const providerLabel = preset.quickPickLabel.replace(" (default)", "");
+    const pathLabel = preset.defaultPath.length > 0 ? preset.defaultPath : "(ignored)";
+    void vscode.window.showInformationMessage(
+      `Saurus: configured ${providerLabel} (path: ${pathLabel}, model: provider default).`
+    );
   }
 
   public isEnabledForDocument(document: vscode.TextDocument): boolean {
@@ -268,7 +385,12 @@ export class SaurusController implements vscode.Disposable {
     this.setSourceFilterForKey(suggestionKey, sourceFilter);
 
     const isUserInitiated = options.userInitiated ?? true;
-    const shouldRunAi = sourceFilter !== "thesaurusOnly" && (options.forceDifferent || settings.aiAutoRun);
+    // `ai.autoGenerateOnOpen` should gate auto-trigger behavior, not explicit user commands.
+    const shouldRunAi = sourceFilter !== "thesaurusOnly" && (
+      options.forceDifferent ||
+      settings.aiAutoRun ||
+      isUserInitiated
+    );
     const shouldRunThesaurus = sourceFilter !== "aiOnly" && settings.thesaurusEnabled;
     let aiAllowedForThisRun = true;
     if (shouldRunAi && settings.aiProvider === "copilotChat" && !isUserInitiated) {
@@ -557,6 +679,83 @@ export class SaurusController implements vscode.Disposable {
       })
     );
 
+    subscriptions.push(
+      vscode.commands.registerCommand("saurus.configureThesaurusProvider", async () => {
+        await this.configureThesaurusProvider(vscode.window.activeTextEditor?.document);
+      })
+    );
+
+    subscriptions.push(
+      vscode.commands.registerCommand("saurus.configureAiProvider", async () => {
+        await this.configureAiProvider(vscode.window.activeTextEditor?.document);
+      })
+    );
+
+    subscriptions.push(
+      vscode.commands.registerCommand("saurus.suggestForSelectionWithPrompt", async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          return;
+        }
+
+        const initialSelection = new vscode.Selection(
+          editor.selection.start,
+          editor.selection.end
+        );
+
+        const direction = await vscode.window.showInputBox({
+          title: "Saurus: Generate With Prompt",
+          prompt: "Enter a short direction for this AI generation run.",
+          placeHolder: "Example: more lyrical, keep meaning intact",
+          ignoreFocusOut: true
+        });
+        if (direction === undefined) {
+          return;
+        }
+
+        const promptDirection = direction.trim();
+        if (promptDirection.length === 0) {
+          void vscode.window.showInformationMessage("Saurus: prompt direction cannot be empty.");
+          return;
+        }
+
+        const document = editor.document;
+        const settings = this.getSettings(document);
+        if (!settings.enabled || !settings.languages.includes(document.languageId)) {
+          return;
+        }
+
+        if (initialSelection.isEmpty) {
+          await runRefreshWithOptionalDirection(promptDirection);
+          return;
+        }
+
+        editor.selection = new vscode.Selection(initialSelection.start, initialSelection.end);
+
+        const wrapped = await this.wrapSelectionInPlaceholder(editor, settings);
+        if (!wrapped) {
+          return;
+        }
+
+        const key = this.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
+        if (key) {
+          this.preferRefreshSelectionKeys.add(key);
+        }
+
+        const generationPromise = this.generateForEditor(editor, {
+          forceDifferent: true,
+          sourceFilter: "all",
+          promptDirection,
+          showNoPlaceholderWarning: false,
+          userInitiated: true
+        });
+
+        await refreshSuggestWidget({ repeat: 2 });
+        await generationPromise;
+        await refreshSuggestWidget({ hard: true, repeat: 2 });
+      })
+    );
+
     const runRefreshWithOptionalDirection = async (
       promptDirection: string | undefined,
       uri?: string,
@@ -591,7 +790,7 @@ export class SaurusController implements vscode.Disposable {
 
       await refreshSuggestWidget({ repeat: 2 });
       await generationPromise;
-      await refreshSuggestWidget({ hard: true, repeat: 2 });
+      await refreshSuggestWidgetStable();
     };
 
     const runSourceFilteredGeneration = async (
@@ -732,7 +931,6 @@ export class SaurusController implements vscode.Disposable {
           if (!match) {
             return;
           }
-
           const previousKey = this.buildSuggestionKeyData(document, match, settings).key;
           const didEdit = await editor.edit((editBuilder) => {
             editBuilder.replace(match.fullRange, suggestion);

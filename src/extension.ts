@@ -35,12 +35,6 @@ export function activate(context: vscode.ExtensionContext): void {
     await vscode.commands.executeCommand("editor.action.triggerSuggest");
   }
 
-  async function refreshSuggestWidget(): Promise<void> {
-    await vscode.commands.executeCommand("hideSuggestWidget");
-    await new Promise<void>((resolve) => setTimeout(resolve, 16));
-    await triggerSuggest();
-  }
-
   async function runAutoTrigger(
     editor: vscode.TextEditor,
     expectedKey: string,
@@ -64,7 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     await triggerSuggest();
     await generationPromise;
-    await refreshSuggestWidget();
+    await triggerSuggest();
   }
 
   context.subscriptions.push(
@@ -142,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       if (controller.hasCachedEntry(currentKey)) {
-        void refreshSuggestWidget();
+        void triggerSuggest();
         return;
       }
 

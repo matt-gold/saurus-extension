@@ -2,7 +2,7 @@
   "name": "saurus-extension",
   "displayName": "Saurus",
   "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
-  "version": "0.2.0",
+  "version": "0.2.4",
   "icon": "assets/icon.png",
   "publisher": "matt-gold",
   "license": "Apache-2.0",
@@ -19,6 +19,9 @@
   "activationEvents": [
     "onCommand:saurus.generateSuggestions",
     "onCommand:saurus.suggestForSelection",
+    "onCommand:saurus.suggestForSelectionWithPrompt",
+    "onCommand:saurus.configureThesaurusProvider",
+    "onCommand:saurus.configureAiProvider",
     "onCommand:saurus.refreshSuggestions",
     "onCommand:saurus.refreshSuggestionsWithPrompt",
     "onCommand:saurus.showAiOnlySuggestions",
@@ -39,6 +42,18 @@
       {
         "command": "saurus.suggestForSelection",
         "title": "Saurus: Suggest For Selected Text"
+      },
+      {
+        "command": "saurus.suggestForSelectionWithPrompt",
+        "title": "Saurus: Suggest For Selected Text (With Prompt)"
+      },
+      {
+        "command": "saurus.configureThesaurusProvider",
+        "title": "Saurus: Configure Thesaurus Provider"
+      },
+      {
+        "command": "saurus.configureAiProvider",
+        "title": "Saurus: Configure AI Provider"
       },
       {
         "command": "saurus.refreshSuggestions",
@@ -274,21 +289,28 @@
         "mac": "cmd+shift+s",
         "linux": "ctrl+shift+s",
         "win": "ctrl+shift+s",
-        "when": "editorTextFocus && editorHasSelection"
+        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
+      },
+      {
+        "command": "saurus.suggestForSelectionWithPrompt",
+        "mac": "cmd+shift+x",
+        "linux": "ctrl+shift+x",
+        "win": "ctrl+shift+x",
+        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
       },
       {
         "command": "saurus.showAiOnlySuggestions",
         "mac": "cmd+shift+a",
         "linux": "ctrl+shift+a",
         "win": "ctrl+shift+a",
-        "when": "editorTextFocus"
+        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
       },
       {
         "command": "saurus.showThesaurusOnlySuggestions",
         "mac": "cmd+shift+z",
         "linux": "ctrl+shift+z",
         "win": "ctrl+shift+z",
-        "when": "editorTextFocus"
+        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
       },
       {
         "command": "saurus.exitPlaceholderSuggestions",

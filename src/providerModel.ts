@@ -77,13 +77,12 @@ function withPrefix(prefix: string, text: string): string {
 }
 
 export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenuItem[] {
-  if (!input.hasEntry && input.sourceStates.thesaurus === "idle" && input.sourceStates.ai === "idle") {
-    return [];
-  }
-
   const items: ProviderMenuItem[] = [];
   const showThesaurus = input.sourceFilter !== "aiOnly";
   const showAi = input.sourceFilter !== "thesaurusOnly";
+  const hasAnyRenderedState = input.hasEntry
+    || input.sourceStates.thesaurus !== "idle"
+    || input.sourceStates.ai !== "idle";
 
   items.push({
     kind: "heading",
@@ -108,7 +107,7 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       });
     } else if (input.thesaurusOptions.length > 0) {
       pushSuggestionItems(items, "thesaurus", input.thesaurusOptions, "011", input.thesaurusPrefix, 1, thesaurusSuggestionDetail);
-    } else {
+    } else if (hasAnyRenderedState) {
       items.push({
         kind: "empty",
         source: "thesaurus",
@@ -137,7 +136,7 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
 
     if (input.aiOptions.length > 0) {
       pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
-    } else if (input.aiAutoRun && input.sourceStates.ai !== "generating") {
+    } else if (input.aiAutoRun && input.sourceStates.ai !== "generating" && hasAnyRenderedState) {
       items.push({
         kind: "empty",
         source: "ai",
