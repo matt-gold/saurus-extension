@@ -24,9 +24,12 @@ function makeInput(overrides: Partial<BuildProviderItemsInput> = {}): BuildProvi
   };
 }
 
-test("returns empty when no entry and all sources idle", () => {
+test("shows heading and AI actions when no entry and all sources idle", () => {
   const items = buildProviderItems(makeInput());
-  assert.equal(items.length, 0);
+  assert.equal(items[0]?.kind, "heading");
+  assert.equal(items.some((item) => item.kind === "refresh"), true);
+  assert.equal(items.some((item) => item.kind === "refreshWithPrompt"), true);
+  assert.equal(items.some((item) => item.kind === "empty"), false);
 });
 
 test("renders heading row and prefixed source suggestions", () => {
@@ -140,6 +143,23 @@ test("shows loading spinner only for prompt action when prompt refresh is active
   assert.ok(withPrompt);
   assert.equal(withPrompt?.label, "$(loading~spin) Generating with prompt...");
   assert.equal(withPrompt?.disabled, true);
+});
+
+test("keeps action rows last while AI is loading with existing results", () => {
+  const items = buildProviderItems(makeInput({
+    sourceStates: { thesaurus: "ready", ai: "generating" },
+    hasEntry: true,
+    thesaurusOptions: ["lucid"],
+    aiOptions: ["clearer phrasing"],
+    thesaurusCached: true,
+    aiCached: false,
+    aiAutoRun: true
+  }));
+
+  const tail = items.slice(-2);
+  assert.deepEqual(tail.map((item) => item.kind), ["refresh", "refreshWithPrompt"]);
+  assert.equal(items.some((item) => item.kind === "loading" && item.source === "ai"), true);
+  assert.equal(items.findIndex((item) => item.kind === "loading" && item.source === "ai") < items.length - 2, true);
 });
 
 test("formats ai detail as only new when no cached results yet", () => {

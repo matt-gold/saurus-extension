@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
 import { SaurusController } from "./commands";
+import { registerConfigCommands } from "./configCommands";
 import { SaurusCompletionProvider } from "./provider";
 import { PlaceholderHighlighter } from "./highlight";
+import { triggerSuggestWidget } from "./suggestWidgetCoordinator";
 
 export function activate(context: vscode.ExtensionContext): void {
   const controller = new SaurusController(context);
@@ -17,6 +19,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, provider));
   context.subscriptions.push(highlighter);
   controller.registerCommands(context.subscriptions);
+  registerConfigCommands(context.subscriptions);
 
   const lastSuggestionKeyByDocument = new Map<string, string | undefined>();
   const autoTriggerTimers = new Map<string, NodeJS.Timeout>();
@@ -29,16 +32,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     clearTimeout(timer);
     autoTriggerTimers.delete(documentUri);
-  }
-
-  async function triggerSuggest(): Promise<void> {
-    await vscode.commands.executeCommand("editor.action.triggerSuggest");
-  }
-
-  async function refreshSuggestWidget(): Promise<void> {
-    await vscode.commands.executeCommand("hideSuggestWidget");
-    await new Promise<void>((resolve) => setTimeout(resolve, 16));
-    await triggerSuggest();
   }
 
   async function runAutoTrigger(
@@ -62,9 +55,9 @@ export function activate(context: vscode.ExtensionContext): void {
       userInitiated: false
     });
 
-    await triggerSuggest();
+    await triggerSuggestWidget();
     await generationPromise;
-    await refreshSuggestWidget();
+    await triggerSuggestWidget();
   }
 
   context.subscriptions.push(
@@ -142,7 +135,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       if (controller.hasCachedEntry(currentKey)) {
-        void refreshSuggestWidget();
+        void triggerSuggestWidget();
         return;
       }
 

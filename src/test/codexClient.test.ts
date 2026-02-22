@@ -81,6 +81,49 @@ test("buildAiExecArgs supports direct copilot binary", () => {
   assert.deepEqual(args, ["-s", "-p", "hello"]);
 });
 
+test("buildAiExecArgs omits --model when model is empty", () => {
+  const codexArgs = buildAiExecArgs(
+    {
+      aiProvider: "codex",
+      aiPath: "codex",
+      timeoutMs: 20000,
+      workspaceDir: "/tmp/workspace",
+      schemaPath: "/tmp/schema.json",
+      model: "   "
+    },
+    "/tmp/out.json",
+    "hello"
+  );
+  assert.equal(codexArgs.includes("--model"), false);
+
+  const claudeArgs = buildAiExecArgs(
+    {
+      aiProvider: "claude",
+      aiPath: "claude",
+      timeoutMs: 20000,
+      workspaceDir: "/tmp/workspace",
+      schemaPath: "/tmp/schema.json"
+    },
+    "/tmp/out.json",
+    "hello"
+  );
+  assert.deepEqual(claudeArgs, ["-p", "hello"]);
+
+  const copilotArgs = buildAiExecArgs(
+    {
+      aiProvider: "copilot",
+      aiPath: "gh",
+      timeoutMs: 20000,
+      workspaceDir: "/tmp/workspace",
+      schemaPath: "/tmp/schema.json",
+      model: ""
+    },
+    "/tmp/out.json",
+    "hello"
+  );
+  assert.deepEqual(copilotArgs, ["copilot", "--", "-s", "-p", "hello"]);
+});
+
 test("buildAiLoginStatusArgs only applies to codex", () => {
   assert.deepEqual(buildAiLoginStatusArgs("codex", "codex"), ["login", "status"]);
   assert.deepEqual(buildAiLoginStatusArgs("copilot", "gh"), ["auth", "status"]);
