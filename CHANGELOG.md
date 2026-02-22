@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- cca024a: Stabilize the Saurus popover refresh behavior (including cursor-entry flow) and add setup commands for configuring thesaurus and AI providers. Also adds a first-class "suggest selected text with prompt" command/hotkey.
+
 ## 0.2.0
 
 ### Minor Changes
