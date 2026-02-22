@@ -1,22 +1,26 @@
 import * as vscode from "vscode";
-import { SaurusController } from "./commands";
-import { SaurusCompletionProvider } from "./provider";
+import { SaurusController, SuggestionStateChangeEvent } from "./commands";
+import { SaurusActionCodeLensProvider } from "./actionCodeLens";
 import { PlaceholderHighlighter } from "./highlight";
+import { SaurusSuggestionQuickPick } from "./suggestionQuickPick";
 
 export function activate(context: vscode.ExtensionContext): void {
   const controller = new SaurusController(context);
-  const provider = new SaurusCompletionProvider(controller);
+  const codeLensProvider = new SaurusActionCodeLensProvider(controller);
   const highlighter = new PlaceholderHighlighter(controller);
+  const suggestionQuickPick = new SaurusSuggestionQuickPick(controller);
   context.subscriptions.push(controller);
+  context.subscriptions.push(codeLensProvider);
+  context.subscriptions.push(highlighter);
+  context.subscriptions.push(suggestionQuickPick);
+  controller.registerCommands(context.subscriptions, suggestionQuickPick);
 
   const selector: vscode.DocumentSelector = [
     { scheme: "file" },
     { scheme: "untitled" }
   ];
 
-  context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, provider));
-  context.subscriptions.push(highlighter);
-  controller.registerCommands(context.subscriptions);
+  context.subscriptions.push(vscode.languages.registerCodeLensProvider(selector, codeLensProvider));
 
   const lastSuggestionKeyByDocument = new Map<string, string | undefined>();
   const autoTriggerTimers = new Map<string, NodeJS.Timeout>();
@@ -31,14 +35,24 @@ export function activate(context: vscode.ExtensionContext): void {
     autoTriggerTimers.delete(documentUri);
   }
 
-  async function triggerSuggest(): Promise<void> {
-    await vscode.commands.executeCommand("editor.action.triggerSuggest");
+  function scheduleHighlighterRefreshForEvent(event?: SuggestionStateChangeEvent): void {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      return;
+    }
+
+    if (event?.documentUri && event.documentUri !== activeEditor.document.uri.toString()) {
+      return;
+    }
+
+    highlighter.schedule(activeEditor);
   }
 
-  async function refreshSuggestWidget(): Promise<void> {
-    await vscode.commands.executeCommand("hideSuggestWidget");
-    await new Promise<void>((resolve) => setTimeout(resolve, 16));
-    await triggerSuggest();
+  function updatePlaceholderContext(editor?: vscode.TextEditor): void {
+    const inPlaceholder = Boolean(
+      editor && controller.getSuggestionKeyAtPosition(editor.document, editor.selection.active)
+    );
+    void vscode.commands.executeCommand("setContext", "saurus.inPlaceholder", inPlaceholder);
   }
 
   async function runAutoTrigger(
@@ -56,16 +70,21 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    const generationPromise = controller.generateForEditor(activeEditor, {
+    await suggestionQuickPick.openForEditor(activeEditor);
+    await controller.generateForEditor(activeEditor, {
       forceDifferent: false,
       quietErrors: true,
       userInitiated: false
     });
-
-    await triggerSuggest();
-    await generationPromise;
-    await refreshSuggestWidget();
+    await suggestionQuickPick.openForEditor(activeEditor);
   }
+
+  context.subscriptions.push(
+    controller.onDidChangeSuggestionState((event) => {
+      scheduleHighlighterRefreshForEvent(event);
+      suggestionQuickPick.syncWithActiveEditor(vscode.window.activeTextEditor);
+    })
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
@@ -74,6 +93,9 @@ export function activate(context: vscode.ExtensionContext): void {
       highlighter.scheduleForDocument(event.document, 40);
       lastSuggestionKeyByDocument.delete(documentUri);
       clearTimer(documentUri);
+      suggestionQuickPick.syncWithActiveEditor(vscode.window.activeTextEditor);
+      updatePlaceholderContext(vscode.window.activeTextEditor);
+      codeLensProvider.refresh();
     })
   );
 
@@ -83,11 +105,17 @@ export function activate(context: vscode.ExtensionContext): void {
       highlighter.clearForDocument(document);
       lastSuggestionKeyByDocument.delete(documentUri);
       clearTimer(documentUri);
+      suggestionQuickPick.syncWithActiveEditor(vscode.window.activeTextEditor);
+      updatePlaceholderContext(vscode.window.activeTextEditor);
+      codeLensProvider.refresh();
     })
   );
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
+      suggestionQuickPick.syncWithActiveEditor(editor);
+      updatePlaceholderContext(editor);
+      codeLensProvider.refresh();
       if (!editor) {
         return;
       }
@@ -98,6 +126,8 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(() => {
       highlighter.refreshVisibleEditors();
+      suggestionQuickPick.syncWithActiveEditor(vscode.window.activeTextEditor);
+      codeLensProvider.refresh();
     })
   );
 
@@ -108,12 +138,17 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       highlighter.refreshVisibleEditors();
+      suggestionQuickPick.syncWithActiveEditor(vscode.window.activeTextEditor);
+      codeLensProvider.refresh();
+      updatePlaceholderContext(vscode.window.activeTextEditor);
     })
   );
 
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorSelection((event) => {
       if (event.selections.length !== 1) {
+        updatePlaceholderContext(undefined);
+        codeLensProvider.refresh();
         return;
       }
 
@@ -122,6 +157,11 @@ export function activate(context: vscode.ExtensionContext): void {
       const documentUri = document.uri.toString();
       const currentKey = controller.getSuggestionKeyAtPosition(document, selection.active);
       const previousKey = lastSuggestionKeyByDocument.get(documentUri);
+
+      updatePlaceholderContext(event.textEditor);
+      codeLensProvider.refresh();
+      highlighter.schedule(event.textEditor);
+      suggestionQuickPick.syncWithActiveEditor(event.textEditor);
 
       lastSuggestionKeyByDocument.set(documentUri, currentKey);
 
@@ -142,7 +182,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       if (controller.hasCachedEntry(currentKey)) {
-        void refreshSuggestWidget();
+        void suggestionQuickPick.openForEditor(event.textEditor);
         return;
       }
 
@@ -155,7 +195,9 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  updatePlaceholderContext(vscode.window.activeTextEditor);
   highlighter.refreshVisibleEditors();
+  codeLensProvider.refresh();
 }
 
 export function deactivate(): void {

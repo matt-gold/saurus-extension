@@ -28,12 +28,14 @@ export class PlaceholderHighlighter implements vscode.Disposable {
   private fullDecoration: vscode.TextEditorDecorationType;
   private delimiterDecoration: vscode.TextEditorDecorationType;
   private innerDecoration: vscode.TextEditorDecorationType;
+  private loadingDecoration: vscode.TextEditorDecorationType;
 
   public constructor(private readonly controller: SaurusController) {
     const defaults = getHighlightSettings();
     this.fullDecoration = vscode.window.createTextEditorDecorationType({});
     this.delimiterDecoration = vscode.window.createTextEditorDecorationType({});
     this.innerDecoration = vscode.window.createTextEditorDecorationType({});
+    this.loadingDecoration = vscode.window.createTextEditorDecorationType({});
     this.ensureDecorationStyles(defaults);
   }
 
@@ -46,6 +48,7 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     this.fullDecoration.dispose();
     this.delimiterDecoration.dispose();
     this.innerDecoration.dispose();
+    this.loadingDecoration.dispose();
   }
 
   public refreshVisibleEditors(): void {
@@ -125,6 +128,7 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     const fullRanges: vscode.Range[] = [];
     const delimiterRanges: vscode.Range[] = [];
     const innerRanges: vscode.Range[] = [];
+    const loadingDecorations: vscode.DecorationOptions[] = [];
 
     for (let line = 0; line < document.lineCount; line += 1) {
       const text = document.lineAt(line).text;
@@ -143,12 +147,32 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     editor.setDecorations(this.fullDecoration, fullRanges);
     editor.setDecorations(this.delimiterDecoration, delimiterRanges);
     editor.setDecorations(this.innerDecoration, innerRanges);
+
+    if (vscode.window.activeTextEditor?.document.uri.toString() === document.uri.toString()) {
+      const lookup = this.controller.getSuggestionMenuLookup(document, vscode.window.activeTextEditor.selection.active);
+      const isGenerating = lookup
+        && (lookup.sourceStates.ai === "generating" || lookup.sourceStates.thesaurus === "generating");
+      if (lookup && isGenerating) {
+        loadingDecorations.push({
+          range: lookup.match.fullRange,
+          renderOptions: {
+            after: {
+              contentText: "  Saurus generating...",
+              color: highlightSettings.delimiterColor
+            }
+          }
+        });
+      }
+    }
+
+    editor.setDecorations(this.loadingDecoration, loadingDecorations);
   }
 
   private clearEditorDecorations(editor: vscode.TextEditor): void {
     editor.setDecorations(this.fullDecoration, []);
     editor.setDecorations(this.delimiterDecoration, []);
     editor.setDecorations(this.innerDecoration, []);
+    editor.setDecorations(this.loadingDecoration, []);
   }
 
   private ensureDecorationStyles(style: HighlightSettings): void {
@@ -160,6 +184,7 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     this.fullDecoration.dispose();
     this.delimiterDecoration.dispose();
     this.innerDecoration.dispose();
+    this.loadingDecoration.dispose();
 
     this.fullDecoration = vscode.window.createTextEditorDecorationType({
       backgroundColor: style.backgroundColor,
@@ -174,6 +199,13 @@ export class PlaceholderHighlighter implements vscode.Disposable {
 
     this.innerDecoration = vscode.window.createTextEditorDecorationType({
       color: style.textColor
+    });
+
+    this.loadingDecoration = vscode.window.createTextEditorDecorationType({
+      after: {
+        margin: "0 0 0 8px",
+        fontStyle: "italic"
+      }
     });
 
     this.styleKey = nextStyleKey;

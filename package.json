@@ -2,7 +2,7 @@
   "name": "saurus-extension",
   "displayName": "Saurus",
   "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
-  "version": "0.1.3",
+  "version": "0.2.1",
   "icon": "assets/icon.png",
   "publisher": "matt-gold",
   "license": "Apache-2.0",
@@ -22,6 +22,7 @@
     "onCommand:saurus.refreshSuggestions",
     "onCommand:saurus.refreshSuggestionsWithPrompt",
     "onCommand:saurus.showAiOnlySuggestions",
+    "onCommand:saurus.showAiOnlySuggestionsWithPrompt",
     "onCommand:saurus.showThesaurusOnlySuggestions",
     "onCommand:saurus.exitPlaceholderSuggestions",
     "onCommand:saurus.clearPersistentCache",
@@ -51,6 +52,10 @@
       {
         "command": "saurus.showAiOnlySuggestions",
         "title": "Saurus: Show AI Suggestions Only"
+      },
+      {
+        "command": "saurus.showAiOnlySuggestionsWithPrompt",
+        "title": "Saurus: Show AI Suggestions Only (With Prompt)"
       },
       {
         "command": "saurus.showThesaurusOnlySuggestions",
@@ -277,23 +282,32 @@
         "when": "editorTextFocus && editorHasSelection"
       },
       {
+        "command": "saurus.generateSuggestions",
+        "mac": "cmd+shift+s",
+        "linux": "ctrl+shift+s",
+        "win": "ctrl+shift+s",
+        "when": "editorTextFocus && !editorHasSelection && saurus.inPlaceholder"
+      },
+      {
         "command": "saurus.showAiOnlySuggestions",
         "mac": "cmd+shift+a",
         "linux": "ctrl+shift+a",
         "win": "ctrl+shift+a",
-        "when": "editorTextFocus"
+        "when": "editorTextFocus && (editorHasSelection || saurus.inPlaceholder)"
+      },
+      {
+        "command": "saurus.showAiOnlySuggestionsWithPrompt",
+        "mac": "cmd+shift+x",
+        "linux": "ctrl+shift+x",
+        "win": "ctrl+shift+x",
+        "when": "editorTextFocus && (editorHasSelection || saurus.inPlaceholder)"
       },
       {
         "command": "saurus.showThesaurusOnlySuggestions",
         "mac": "cmd+shift+z",
         "linux": "ctrl+shift+z",
         "win": "ctrl+shift+z",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "saurus.exitPlaceholderSuggestions",
-        "key": "escape",
-        "when": "suggestWidgetVisible && editorTextFocus"
+        "when": "editorTextFocus && (editorHasSelection || saurus.inPlaceholder)"
       }
     ]
   },
