@@ -145,6 +145,23 @@ test("shows loading spinner only for prompt action when prompt refresh is active
   assert.equal(withPrompt?.disabled, true);
 });
 
+test("keeps action rows last while AI is loading with existing results", () => {
+  const items = buildProviderItems(makeInput({
+    sourceStates: { thesaurus: "ready", ai: "generating" },
+    hasEntry: true,
+    thesaurusOptions: ["lucid"],
+    aiOptions: ["clearer phrasing"],
+    thesaurusCached: true,
+    aiCached: false,
+    aiAutoRun: true
+  }));
+
+  const tail = items.slice(-2);
+  assert.deepEqual(tail.map((item) => item.kind), ["refresh", "refreshWithPrompt"]);
+  assert.equal(items.some((item) => item.kind === "loading" && item.source === "ai"), true);
+  assert.equal(items.findIndex((item) => item.kind === "loading" && item.source === "ai") < items.length - 2, true);
+});
+
 test("formats ai detail as only new when no cached results yet", () => {
   const items = buildProviderItems(makeInput({
     sourceStates: { thesaurus: "ready", ai: "ready" },

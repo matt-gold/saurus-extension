@@ -33,6 +33,20 @@ export interface BuildProviderItemsInput {
   aiActiveAction?: "refresh" | "refreshWithPrompt";
 }
 
+type ProviderMenuVisibilityState = "actionsOnly" | "content";
+type ProviderSourceSectionKind = "hidden" | "initialIdle" | "results" | "empty" | "error";
+
+interface ProviderSourceSectionState {
+  kind: ProviderSourceSectionKind;
+  showLoadingRow: boolean;
+}
+
+interface ProviderMenuRenderState {
+  visibility: ProviderMenuVisibilityState;
+  thesaurus: ProviderSourceSectionState;
+  ai: ProviderSourceSectionState;
+}
+
 function formatThesaurusProviderName(provider: string): string {
   if (provider === "merriamWebster") {
     return "Merriam-Webster";
@@ -76,13 +90,93 @@ function withPrefix(prefix: string, text: string): string {
   return `${prefix} ${text}`;
 }
 
-export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenuItem[] {
-  const items: ProviderMenuItem[] = [];
+function buildThesaurusSectionState(
+  input: BuildProviderItemsInput,
+  menuVisibility: ProviderMenuVisibilityState,
+  showThesaurus: boolean
+): ProviderSourceSectionState {
+  if (!showThesaurus) {
+    return { kind: "hidden", showLoadingRow: false };
+  }
+
+  if (input.thesaurusOptions.length > 0) {
+    return {
+      kind: "results",
+      showLoadingRow: input.sourceStates.thesaurus === "generating" && input.thesaurusOptions.length === 0
+    };
+  }
+
+  if (input.sourceStates.thesaurus === "generating") {
+    return { kind: "empty", showLoadingRow: true };
+  }
+
+  if (menuVisibility === "actionsOnly") {
+    return { kind: "initialIdle", showLoadingRow: false };
+  }
+
+  if (input.sourceStates.thesaurus === "error") {
+    return { kind: "error", showLoadingRow: false };
+  }
+
+  return { kind: "empty", showLoadingRow: false };
+}
+
+function buildAiSectionState(
+  input: BuildProviderItemsInput,
+  menuVisibility: ProviderMenuVisibilityState,
+  showAi: boolean
+): ProviderSourceSectionState {
+  if (!showAi) {
+    return { kind: "hidden", showLoadingRow: false };
+  }
+
+  if (input.aiOptions.length > 0) {
+    return {
+      kind: "results",
+      showLoadingRow: input.sourceStates.ai === "generating"
+    };
+  }
+
+  if (input.sourceStates.ai === "generating") {
+    return { kind: "empty", showLoadingRow: true };
+  }
+
+  if (menuVisibility === "actionsOnly") {
+    return { kind: "initialIdle", showLoadingRow: false };
+  }
+
+  if (input.sourceStates.ai === "error") {
+    return { kind: "error", showLoadingRow: false };
+  }
+
+  if (input.aiAutoRun) {
+    return { kind: "empty", showLoadingRow: false };
+  }
+
+  return { kind: "initialIdle", showLoadingRow: false };
+}
+
+function buildProviderMenuRenderState(input: BuildProviderItemsInput): ProviderMenuRenderState {
   const showThesaurus = input.sourceFilter !== "aiOnly";
   const showAi = input.sourceFilter !== "thesaurusOnly";
-  const hasAnyRenderedState = input.hasEntry
-    || input.sourceStates.thesaurus !== "idle"
-    || input.sourceStates.ai !== "idle";
+  const visibility: ProviderMenuVisibilityState = (
+    !input.hasEntry &&
+    input.sourceStates.thesaurus === "idle" &&
+    input.sourceStates.ai === "idle"
+  )
+    ? "actionsOnly"
+    : "content";
+
+  return {
+    visibility,
+    thesaurus: buildThesaurusSectionState(input, visibility, showThesaurus),
+    ai: buildAiSectionState(input, visibility, showAi)
+  };
+}
+
+export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenuItem[] {
+  const items: ProviderMenuItem[] = [];
+  const renderState = buildProviderMenuRenderState(input);
 
   items.push({
     kind: "heading",
@@ -92,11 +186,11 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
     sortText: "0000"
   });
 
-  if (showThesaurus) {
+  if (renderState.thesaurus.kind !== "hidden") {
     const thesaurusProviderName = formatThesaurusProviderName(input.thesaurusProvider);
-    const thesaurusFetching = input.sourceStates.thesaurus === "generating";
+    const thesaurusFetching = renderState.thesaurus.showLoadingRow;
     const thesaurusSuggestionDetail = buildThesaurusDetail(thesaurusProviderName, input.thesaurusCached, false);
-    if (input.sourceStates.thesaurus === "generating" && input.thesaurusOptions.length === 0) {
+    if (renderState.thesaurus.showLoadingRow) {
       items.push({
         kind: "loading",
         source: "thesaurus",
@@ -105,9 +199,11 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
         detail: buildThesaurusDetail(thesaurusProviderName, input.thesaurusCached, thesaurusFetching),
         sortText: "0100"
       });
-    } else if (input.thesaurusOptions.length > 0) {
+    }
+
+    if (renderState.thesaurus.kind === "results") {
       pushSuggestionItems(items, "thesaurus", input.thesaurusOptions, "011", input.thesaurusPrefix, 1, thesaurusSuggestionDetail);
-    } else if (hasAnyRenderedState) {
+    } else if (renderState.thesaurus.kind === "empty" || renderState.thesaurus.kind === "error") {
       items.push({
         kind: "empty",
         source: "thesaurus",
@@ -119,11 +215,11 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
     }
   }
 
-  if (showAi) {
+  if (renderState.ai.kind !== "hidden") {
     const aiSuggestionDetail = input.aiCached
       ? `From ${input.aiProviderName} cache`
       : `From ${input.aiProviderName}`;
-    if (input.sourceStates.ai === "generating") {
+    if (renderState.ai.showLoadingRow) {
       items.push({
         kind: "loading",
         source: "ai",
@@ -134,9 +230,9 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       });
     }
 
-    if (input.aiOptions.length > 0) {
+    if (renderState.ai.kind === "results") {
       pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
-    } else if (input.aiAutoRun && input.sourceStates.ai !== "generating" && hasAnyRenderedState) {
+    } else if (renderState.ai.kind === "empty") {
       items.push({
         kind: "empty",
         source: "ai",
