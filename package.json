@@ -22,6 +22,7 @@
     "onCommand:saurus.suggestForSelectionWithPrompt",
     "onCommand:saurus.configureThesaurusProvider",
     "onCommand:saurus.configureAiProvider",
+    "onCommand:saurus.configureAiModel",
     "onCommand:saurus.refreshSuggestions",
     "onCommand:saurus.refreshSuggestionsWithPrompt",
     "onCommand:saurus.showAiOnlySuggestions",
@@ -54,6 +55,10 @@
       {
         "command": "saurus.configureAiProvider",
         "title": "Saurus: Configure AI Provider"
+      },
+      {
+        "command": "saurus.configureAiModel",
+        "title": "Saurus: Configure AI Model"
       },
       {
         "command": "saurus.refreshSuggestions",
