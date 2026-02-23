@@ -20,14 +20,6 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
 </div>
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4">Watch the demo video</a>
-</p>
-
-<p align="center">
-  GitHub preview (GIF, click to open MP4)
-</p>
-
-<p align="center">
   <a href="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4">
     <img src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.gif" alt="Saurus demo preview" width="100%" />
   </a>
