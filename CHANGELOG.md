@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- d501d16: Add `Saurus: Configure AI Model`, a provider-aware model picker that supports Copilot Chat discovery and provider-specific CLI model lists/fallbacks for Copilot CLI, Claude CLI, and Codex CLI. Includes a provider-default option, manual model entry, and safe rollback if updating `saurus.ai.model` fails.
+
+### Patch Changes
+
+- 1293853: Fix several popover reliability issues (including auto-wrap placeholder entry and loading-state refresh behavior) and improve AI/thesaurus caching so results are reused more consistently.
+
 ## 0.3.0
 
 ### Minor Changes
