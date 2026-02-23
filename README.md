@@ -8,6 +8,31 @@
 
 It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
 
+<div align="center">
+  <video
+    src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4"
+    controls
+    muted
+    playsinline
+    preload="metadata"
+    width="100%">
+  </video>
+</div>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4">Watch the demo video</a>
+</p>
+
+<p align="center">
+  GitHub preview (GIF, click to open MP4)
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4">
+    <img src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.gif" alt="Saurus demo preview" width="100%" />
+  </a>
+</p>
+
 ## Key Workflows
 
 These are the primary workflows:
