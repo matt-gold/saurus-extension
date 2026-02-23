@@ -203,7 +203,10 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
 
     if (renderState.thesaurus.kind === "results") {
       pushSuggestionItems(items, "thesaurus", input.thesaurusOptions, "011", input.thesaurusPrefix, 1, thesaurusSuggestionDetail);
-    } else if (renderState.thesaurus.kind === "empty" || renderState.thesaurus.kind === "error") {
+    } else if (
+      (renderState.thesaurus.kind === "empty" || renderState.thesaurus.kind === "error") &&
+      !renderState.thesaurus.showLoadingRow
+    ) {
       items.push({
         kind: "empty",
         source: "thesaurus",
@@ -232,7 +235,7 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
 
     if (renderState.ai.kind === "results") {
       pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
-    } else if (renderState.ai.kind === "empty") {
+    } else if (renderState.ai.kind === "empty" && !renderState.ai.showLoadingRow) {
       items.push({
         kind: "empty",
         source: "ai",
@@ -243,31 +246,25 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       });
     }
 
-    items.push({
-      kind: "refresh",
-      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? "$(loading~spin) Getting more AI options..."
-        : "↻ Generate more",
-      insertText: input.placeholderRawText,
-      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? `Getting more AI options from ${input.aiProviderName}`
-        : `with ${input.aiProviderName}`,
-      sortText: "9900",
-      disabled: input.sourceStates.ai === "generating"
-    });
+    if (input.sourceStates.ai !== "generating") {
+      items.push({
+        kind: "refresh",
+        label: "↻ Generate more",
+        insertText: input.placeholderRawText,
+        detail: `with ${input.aiProviderName}`,
+        sortText: "9900",
+        disabled: false
+      });
 
-    items.push({
-      kind: "refreshWithPrompt",
-      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
-        ? "$(loading~spin) Generating with prompt..."
-        : "↻ Generate w/ prompt",
-      insertText: input.placeholderRawText,
-      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
-        ? "Generating with your custom direction"
-        : `with ${input.aiProviderName}`,
-      sortText: "9901",
-      disabled: input.sourceStates.ai === "generating"
-    });
+      items.push({
+        kind: "refreshWithPrompt",
+        label: "↻ Generate w/ prompt",
+        insertText: input.placeholderRawText,
+        detail: `with ${input.aiProviderName}`,
+        sortText: "9901",
+        disabled: false
+      });
+    }
   }
 
   return items;

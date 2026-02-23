@@ -372,14 +372,9 @@ export class SaurusController implements vscode.Disposable {
             thesaurusLastResponseCached = false;
             addSuggestionsToSeen(deduped, seenNormalized, seenRaw);
             this.cache.setEntry(suggestionKey, buildCurrentEntry());
-            this.cache.setSourceState(suggestionKey, "thesaurus", "ready", documentUri);
-            this.notifyCompletionItemsChanged();
-            if (needsAi) {
-              void triggerSuggestWidget();
-            }
+            this.setSourceSettledStateAndRefreshPopover(suggestionKey, "thesaurus", "ready", documentUri);
           } catch (error) {
-            this.cache.setSourceState(suggestionKey, "thesaurus", "error", documentUri);
-            this.notifyCompletionItemsChanged();
+            this.setSourceSettledStateAndRefreshPopover(suggestionKey, "thesaurus", "error", documentUri);
             if (!options.quietErrors) {
               void vscode.window.showErrorMessage(`Saurus thesaurus: ${this.getErrorMessage(error)}`);
             }
@@ -428,20 +423,19 @@ export class SaurusController implements vscode.Disposable {
             aiLoadedCount = aiOptions.length;
             aiLastResponseCached = false;
             this.cache.setEntry(suggestionKey, buildCurrentEntry());
-            this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
-            this.notifyCompletionItemsChanged();
+            this.setSourceSettledStateAndRefreshPopover(suggestionKey, "ai", "ready", documentUri);
           } catch (error) {
             aiFailed = true;
             aiLastAddedCount = 0;
             aiLoadedCount = aiOptions.length;
             aiLastResponseCached = true;
             this.cache.setEntry(suggestionKey, buildCurrentEntry());
-            if (aiOptions.length > 0) {
-              this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
-            } else {
-              this.cache.setSourceState(suggestionKey, "ai", "error", documentUri);
-            }
-            this.notifyCompletionItemsChanged();
+            this.setSourceSettledStateAndRefreshPopover(
+              suggestionKey,
+              "ai",
+              aiOptions.length > 0 ? "ready" : "error",
+              documentUri
+            );
 
             if (!options.quietErrors) {
               void vscode.window.showErrorMessage(`Saurus AI: ${this.getErrorMessage(error)}`);
@@ -852,6 +846,20 @@ export class SaurusController implements vscode.Disposable {
 
   private notifyCompletionItemsChanged(): void {
     this.completionItemsChangedEmitter.fire();
+  }
+
+  private setSourceSettledStateAndRefreshPopover(
+    key: string,
+    source: "thesaurus" | "ai",
+    state: "ready" | "error",
+    documentUri: string
+  ): void {
+    this.cache.setSourceState(key, source, state, documentUri);
+    this.notifyCompletionItemsChanged();
+    // Keep source completion UI refresh behavior symmetrical: when either async
+    // source lands new state/results, re-trigger the suggest widget so loading
+    // rows are replaced without requiring a manual reopen.
+    void triggerSuggestWidget();
   }
 
   private async exitPlaceholderSuggestions(uri?: string, line?: number, character?: number): Promise<void> {
