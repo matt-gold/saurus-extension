@@ -45,6 +45,11 @@ import {
   savePersistedCache
 } from "./persistentCache";
 import {
+  buildAiSemanticCacheKey,
+  buildThesaurusSemanticCacheKey,
+  normalizeAiAdjacentContext
+} from "./suggestionKeys";
+import {
   hideSuggestWidget,
   refreshSuggestWidget,
   refreshSuggestWidgetStable,
@@ -80,8 +85,21 @@ interface GenerateOptions {
   userInitiated?: boolean;
 }
 
+interface ThesaurusSemanticCacheEntry {
+  options: string[];
+  info?: ThesaurusLookupInfo;
+}
+
+interface AiSemanticCacheEntry {
+  options: string[];
+  lastPrompt?: string;
+  lastModel?: string;
+}
+
 export class SaurusController implements vscode.Disposable {
   private readonly cache = new SuggestionCache();
+  private readonly thesaurusSemanticCache = new Map<string, ThesaurusSemanticCacheEntry>();
+  private readonly aiSemanticCache = new Map<string, AiSemanticCacheEntry>();
   private readonly schemaPath: string;
   private readonly persistentCachePath: string;
   private readonly completionItemsChangedEmitter = new vscode.EventEmitter<void>();
@@ -148,7 +166,12 @@ export class SaurusController implements vscode.Disposable {
     }
 
     const keyData = this.buildSuggestionKeyData(document, match, settings);
-    const cachedEntry = this.cache.getEntry(keyData.key);
+    const cachedEntry = this.hydrateUiEntryFromSemanticCaches(
+      keyData.key,
+      keyData,
+      document,
+      this.cache.getEntry(keyData.key)
+    );
     if (cachedEntry) {
       this.schedulePersistentCacheSave();
     }
@@ -241,7 +264,14 @@ export class SaurusController implements vscode.Disposable {
     const keyData = this.buildSuggestionKeyData(document, match, settings);
     const suggestionKey = keyData.key;
     const documentUri = document.uri.toString();
-    const existingEntry = this.cache.getEntry(suggestionKey);
+    let existingEntry = this.hydrateUiEntryFromSemanticCaches(
+      suggestionKey,
+      keyData,
+      document,
+      this.cache.getEntry(suggestionKey)
+    );
+    const hasCachedThesaurus = this.thesaurusSemanticCache.has(keyData.thesaurusCacheKey);
+    const hasCachedAi = this.aiSemanticCache.has(keyData.aiCacheKey);
     const sourceFilter = options.sourceFilter
       ?? this.sourceFilterByKey.get(suggestionKey)
       ?? this.mapActivationModeToSourceFilter(settings.activationModeOnEnter);
@@ -259,8 +289,8 @@ export class SaurusController implements vscode.Disposable {
     if (shouldRunAi && settings.aiProvider === "copilotChat" && !isUserInitiated) {
       aiAllowedForThisRun = await canUseCopilotChatInBackground(this.extensionContext, settings.aiModel);
     }
-    const needsThesaurus = shouldRunThesaurus && (!existingEntry || existingEntry.thesaurusOptions.length === 0);
-    const needsAi = aiAllowedForThisRun && shouldRunAi && (options.forceDifferent || !existingEntry || existingEntry.aiOptions.length === 0);
+    const needsThesaurus = shouldRunThesaurus && !hasCachedThesaurus;
+    const needsAi = aiAllowedForThisRun && shouldRunAi && (options.forceDifferent || !hasCachedAi);
 
     if (!needsThesaurus && !needsAi) {
       if (existingEntry) {
@@ -316,7 +346,12 @@ export class SaurusController implements vscode.Disposable {
 
     try {
       await this.cache.runExclusive(suggestionKey, async () => {
-        const entryAtStart = this.cache.getEntry(suggestionKey) ?? existingEntry;
+        const entryAtStart = this.hydrateUiEntryFromSemanticCaches(
+          suggestionKey,
+          keyData,
+          document,
+          this.cache.getEntry(suggestionKey) ?? existingEntry
+        ) ?? existingEntry;
         let thesaurusOptions = entryAtStart ? [...entryAtStart.thesaurusOptions] : [];
         let aiOptions = entryAtStart ? [...entryAtStart.aiOptions] : [];
         let thesaurusInfo: ThesaurusLookupInfo | undefined = entryAtStart?.thesaurusInfo;
@@ -371,15 +406,14 @@ export class SaurusController implements vscode.Disposable {
             };
             thesaurusLastResponseCached = false;
             addSuggestionsToSeen(deduped, seenNormalized, seenRaw);
+            this.thesaurusSemanticCache.set(keyData.thesaurusCacheKey, {
+              options: [...deduped],
+              info: thesaurusInfo
+            });
             this.cache.setEntry(suggestionKey, buildCurrentEntry());
-            this.cache.setSourceState(suggestionKey, "thesaurus", "ready", documentUri);
-            this.notifyCompletionItemsChanged();
-            if (needsAi) {
-              void triggerSuggestWidget();
-            }
+            this.setSourceSettledStateAndRefreshPopover(suggestionKey, "thesaurus", "ready", documentUri);
           } catch (error) {
-            this.cache.setSourceState(suggestionKey, "thesaurus", "error", documentUri);
-            this.notifyCompletionItemsChanged();
+            this.setSourceSettledStateAndRefreshPopover(suggestionKey, "thesaurus", "error", documentUri);
             if (!options.quietErrors) {
               void vscode.window.showErrorMessage(`Saurus thesaurus: ${this.getErrorMessage(error)}`);
             }
@@ -427,21 +461,25 @@ export class SaurusController implements vscode.Disposable {
             aiOptions = [...aiOptions, ...nextOptions];
             aiLoadedCount = aiOptions.length;
             aiLastResponseCached = false;
+            this.aiSemanticCache.set(keyData.aiCacheKey, {
+              options: [...aiOptions],
+              lastPrompt: lastAiPrompt,
+              lastModel: lastAiModel
+            });
             this.cache.setEntry(suggestionKey, buildCurrentEntry());
-            this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
-            this.notifyCompletionItemsChanged();
+            this.setSourceSettledStateAndRefreshPopover(suggestionKey, "ai", "ready", documentUri);
           } catch (error) {
             aiFailed = true;
             aiLastAddedCount = 0;
             aiLoadedCount = aiOptions.length;
             aiLastResponseCached = true;
             this.cache.setEntry(suggestionKey, buildCurrentEntry());
-            if (aiOptions.length > 0) {
-              this.cache.setSourceState(suggestionKey, "ai", "ready", documentUri);
-            } else {
-              this.cache.setSourceState(suggestionKey, "ai", "error", documentUri);
-            }
-            this.notifyCompletionItemsChanged();
+            this.setSourceSettledStateAndRefreshPopover(
+              suggestionKey,
+              "ai",
+              aiOptions.length > 0 ? "ready" : "error",
+              documentUri
+            );
 
             if (!options.quietErrors) {
               void vscode.window.showErrorMessage(`Saurus AI: ${this.getErrorMessage(error)}`);
@@ -854,6 +892,105 @@ export class SaurusController implements vscode.Disposable {
     this.completionItemsChangedEmitter.fire();
   }
 
+  private hydrateUiEntryFromSemanticCaches(
+    suggestionKey: string,
+    keyData: SuggestionKeyData,
+    document: vscode.TextDocument,
+    existingEntry?: SuggestionCacheEntry
+  ): SuggestionCacheEntry | undefined {
+    const thesaurusSemantic = this.thesaurusSemanticCache.get(keyData.thesaurusCacheKey);
+    const aiSemantic = this.aiSemanticCache.get(keyData.aiCacheKey);
+
+    if (!existingEntry && !thesaurusSemantic && !aiSemantic) {
+      return undefined;
+    }
+
+    let nextEntry = existingEntry
+      ? {
+        ...existingEntry,
+        thesaurusOptions: [...existingEntry.thesaurusOptions],
+        aiOptions: [...existingEntry.aiOptions],
+        seenNormalized: new Set<string>(existingEntry.seenNormalized),
+        seenRaw: [...existingEntry.seenRaw]
+      }
+      : this.createEmptyUiCacheEntry(document);
+
+    let changed = !existingEntry;
+
+    if (thesaurusSemantic && nextEntry.thesaurusOptions.length === 0) {
+      nextEntry = {
+        ...nextEntry,
+        thesaurusOptions: [...thesaurusSemantic.options],
+        thesaurusInfo: thesaurusSemantic.info,
+        thesaurusLastResponseCached: true
+      };
+      changed = true;
+    }
+
+    if (aiSemantic && nextEntry.aiOptions.length === 0) {
+      nextEntry = {
+        ...nextEntry,
+        aiOptions: [...aiSemantic.options],
+        lastAiPrompt: aiSemantic.lastPrompt,
+        lastAiModel: aiSemantic.lastModel,
+        aiLoadedCount: aiSemantic.options.length,
+        aiLastAddedCount: 0,
+        aiLastResponseCached: true
+      };
+      changed = true;
+    }
+
+    if (!changed) {
+      return existingEntry;
+    }
+
+    const seenNormalized = new Set<string>();
+    const seenRaw: string[] = [];
+    addSuggestionsToSeen(nextEntry.thesaurusOptions, seenNormalized, seenRaw);
+    addSuggestionsToSeen(nextEntry.aiOptions, seenNormalized, seenRaw);
+    nextEntry = {
+      ...nextEntry,
+      seenNormalized,
+      seenRaw,
+      lastAccessedAt: Date.now()
+    };
+
+    this.cache.setEntry(suggestionKey, nextEntry);
+    return nextEntry;
+  }
+
+  private createEmptyUiCacheEntry(document: vscode.TextDocument): SuggestionCacheEntry {
+    const now = Date.now();
+    return {
+      thesaurusOptions: [],
+      aiOptions: [],
+      thesaurusLastResponseCached: true,
+      aiLoadedCount: 0,
+      aiLastAddedCount: 0,
+      aiLastResponseCached: true,
+      seenNormalized: new Set<string>(),
+      seenRaw: [],
+      createdAt: now,
+      documentVersion: document.version,
+      documentUri: document.uri.toString(),
+      lastAccessedAt: now
+    };
+  }
+
+  private setSourceSettledStateAndRefreshPopover(
+    key: string,
+    source: "thesaurus" | "ai",
+    state: "ready" | "error",
+    documentUri: string
+  ): void {
+    this.cache.setSourceState(key, source, state, documentUri);
+    this.notifyCompletionItemsChanged();
+    // Keep source completion UI refresh behavior symmetrical: when either async
+    // source lands new state/results, re-trigger the suggest widget so loading
+    // rows are replaced without requiring a manual reopen.
+    void triggerSuggestWidget();
+  }
+
   private async exitPlaceholderSuggestions(uri?: string, line?: number, character?: number): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -1101,6 +1238,8 @@ export class SaurusController implements vscode.Disposable {
 
     const promptTemplateHash = hashText(settings.promptTemplate);
     const aiPathForKey = settings.aiProvider === "copilotChat" ? "" : settings.aiPath;
+    const aiContextBefore = normalizeAiAdjacentContext(context.contextBefore, settings.delimiters);
+    const aiContextAfter = normalizeAiAdjacentContext(context.contextAfter, settings.delimiters);
 
     const payload = JSON.stringify({
       uri: document.uri.toString(),
@@ -1121,8 +1260,22 @@ export class SaurusController implements vscode.Disposable {
 
     return {
       key: `${document.uri.toString()}::${hashText(payload)}`,
-      contextBefore: context.contextBefore,
-      contextAfter: context.contextAfter,
+      aiCacheKey: buildAiSemanticCacheKey({
+        placeholder: match.rawInnerText,
+        contextBefore: aiContextBefore,
+        contextAfter: aiContextAfter,
+        aiProvider: settings.aiProvider,
+        aiPath: aiPathForKey,
+        aiModel: settings.aiModel,
+        aiReasoningEffort: settings.aiReasoningEffort,
+        promptTemplateHash
+      }),
+      thesaurusCacheKey: buildThesaurusSemanticCacheKey({
+        provider: settings.thesaurusProvider,
+        rawPlaceholder: match.rawInnerText
+      }),
+      contextBefore: aiContextBefore,
+      contextAfter: aiContextAfter,
       promptTemplateHash
     };
   }

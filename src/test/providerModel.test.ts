@@ -90,9 +90,14 @@ test("shows thesaurus loading row while fetching", () => {
   assert.ok(loading);
   assert.match(loading?.label ?? "", /📖/);
   assert.match(loading?.detail ?? "", /From Merriam-Webster API • fetching now/);
+  assert.equal(
+    items.some((item) => item.kind === "empty" && item.source === "thesaurus"),
+    false,
+    "should not show empty thesaurus row while loading"
+  );
 });
 
-test("shows loading spinner only for refresh action when refresh is active", () => {
+test("shows disabled generate actions while AI refresh is active", () => {
   const items = buildProviderItems(makeInput({
     sourceStates: { thesaurus: "ready", ai: "generating" },
     hasEntry: true,
@@ -108,6 +113,11 @@ test("shows loading spinner only for refresh action when refresh is active", () 
 
   const aiLoading = items.find((item) => item.kind === "loading" && item.source === "ai");
   assert.ok(aiLoading);
+  assert.equal(
+    items.some((item) => item.kind === "empty" && item.source === "ai"),
+    false,
+    "should not show empty AI row while loading"
+  );
 
   const refresh = items.find((item) => item.kind === "refresh");
   assert.ok(refresh);
@@ -120,7 +130,7 @@ test("shows loading spinner only for refresh action when refresh is active", () 
   assert.equal(withPrompt?.disabled, true);
 });
 
-test("shows loading spinner only for prompt action when prompt refresh is active", () => {
+test("shows disabled generate actions while prompt refresh is active", () => {
   const items = buildProviderItems(makeInput({
     sourceStates: { thesaurus: "ready", ai: "generating" },
     hasEntry: true,
@@ -145,7 +155,7 @@ test("shows loading spinner only for prompt action when prompt refresh is active
   assert.equal(withPrompt?.disabled, true);
 });
 
-test("keeps action rows last while AI is loading with existing results", () => {
+test("keeps action rows visible and last while AI is loading with existing results", () => {
   const items = buildProviderItems(makeInput({
     sourceStates: { thesaurus: "ready", ai: "generating" },
     hasEntry: true,
@@ -158,8 +168,9 @@ test("keeps action rows last while AI is loading with existing results", () => {
 
   const tail = items.slice(-2);
   assert.deepEqual(tail.map((item) => item.kind), ["refresh", "refreshWithPrompt"]);
+  assert.equal(items.at(-2)?.disabled, true);
+  assert.equal(items.at(-1)?.disabled, true);
   assert.equal(items.some((item) => item.kind === "loading" && item.source === "ai"), true);
-  assert.equal(items.findIndex((item) => item.kind === "loading" && item.source === "ai") < items.length - 2, true);
 });
 
 test("formats ai detail as only new when no cached results yet", () => {

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { SaurusController } from "./commands";
 import { registerConfigCommands } from "./configCommands";
+import { findPlaceholderAtPosition } from "./placeholder";
 import { SaurusCompletionProvider } from "./provider";
 import { PlaceholderHighlighter } from "./highlight";
 import { triggerSuggestWidget } from "./suggestWidgetCoordinator";
@@ -114,6 +115,26 @@ export function activate(context: vscode.ExtensionContext): void {
       const document = event.textEditor.document;
       const documentUri = document.uri.toString();
       const currentKey = controller.getSuggestionKeyAtPosition(document, selection.active);
+
+      // VS Code auto-closing behavior can leave the placeholder inner text selected
+      // after typing the opening delimiter around a selection (e.g. typing "{{").
+      // If Saurus opens on that non-empty selection, command-only rows (Generate more,
+      // etc.) may replace the selected inner text with "" before their command runs.
+      // Collapse only this exact "selection equals placeholder inner range" case and
+      // let the follow-up selection event continue the normal Saurus auto-open flow.
+      if (currentKey && !selection.isEmpty) {
+        const settings = controller.getSettings(document);
+        const match = findPlaceholderAtPosition(document, selection.active, settings.delimiters);
+        if (
+          match &&
+          selection.start.isEqual(match.innerRange.start) &&
+          selection.end.isEqual(match.innerRange.end)
+        ) {
+          event.textEditor.selection = new vscode.Selection(selection.active, selection.active);
+          return;
+        }
+      }
+
       const previousKey = lastSuggestionKeyByDocument.get(documentUri);
 
       lastSuggestionKeyByDocument.set(documentUri, currentKey);

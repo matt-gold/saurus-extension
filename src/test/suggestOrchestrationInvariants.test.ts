@@ -32,3 +32,12 @@ test("suggest widget command strings are owned by coordinator module", () => {
   assert.match(coordinatorSource, /"editor\.action\.triggerSuggest"/);
   assert.match(coordinatorSource, /"hideSuggestWidget"/);
 });
+
+test("async source completion refresh path is shared across thesaurus and AI", () => {
+  const commandsSource = readSourceFile("commands.ts");
+  assert.match(commandsSource, /private setSourceSettledStateAndRefreshPopover\(/);
+  assert.match(commandsSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "thesaurus", "ready"/);
+  assert.match(commandsSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "thesaurus", "error"/);
+  assert.match(commandsSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "ai", "ready"/);
+  assert.equal(commandsSource.includes("if (needsAi) {\n              void triggerSuggestWidget();"), false);
+});
