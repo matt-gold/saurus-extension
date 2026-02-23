@@ -1,4 +1,4 @@
-# Saurus - VSCode Extension
+# Saurus: A VSCode extension for writers
 
 <div align="center">
   <img src="assets/icon.png" alt="Saurus logo" width="128" />
