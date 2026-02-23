@@ -246,25 +246,31 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       });
     }
 
-    if (input.sourceStates.ai !== "generating") {
-      items.push({
-        kind: "refresh",
-        label: "↻ Generate more",
-        insertText: input.placeholderRawText,
-        detail: `with ${input.aiProviderName}`,
-        sortText: "9900",
-        disabled: false
-      });
+    items.push({
+      kind: "refresh",
+      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
+        ? "$(loading~spin) Getting more AI options..."
+        : "↻ Generate more",
+      insertText: input.placeholderRawText,
+      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
+        ? `Getting more AI options from ${input.aiProviderName}`
+        : `with ${input.aiProviderName}`,
+      sortText: "9900",
+      disabled: input.sourceStates.ai === "generating"
+    });
 
-      items.push({
-        kind: "refreshWithPrompt",
-        label: "↻ Generate w/ prompt",
-        insertText: input.placeholderRawText,
-        detail: `with ${input.aiProviderName}`,
-        sortText: "9901",
-        disabled: false
-      });
-    }
+    items.push({
+      kind: "refreshWithPrompt",
+      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
+        ? "$(loading~spin) Generating with prompt..."
+        : "↻ Generate w/ prompt",
+      insertText: input.placeholderRawText,
+      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
+        ? "Generating with your custom direction"
+        : `with ${input.aiProviderName}`,
+      sortText: "9901",
+      disabled: input.sourceStates.ai === "generating"
+    });
   }
 
   return items;

@@ -111,6 +111,8 @@ export interface BuildContextResult {
 
 export interface SuggestionKeyData {
   key: SuggestionKey;
+  aiCacheKey: SuggestionKey;
+  thesaurusCacheKey: SuggestionKey;
   contextBefore: string;
   contextAfter: string;
   promptTemplateHash: string;
