@@ -4,7 +4,7 @@ import {
   buildAiSemanticCacheKey,
   buildThesaurusSemanticCacheKey,
   normalizeAiAdjacentContext
-} from "../suggestionKeys";
+} from "../core/suggestions";
 
 test("thesaurus semantic key is shared for same term and provider", () => {
   const a = buildThesaurusSemanticCacheKey({

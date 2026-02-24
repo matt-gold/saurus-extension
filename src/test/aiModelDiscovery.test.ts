@@ -7,7 +7,7 @@ import {
   getCliModelDiscoveryCommand,
   parseCodexModelsCache,
   parseModelChoicesFromHelp
-} from "../aiModelDiscovery";
+} from "../services/ai/aiModelDiscovery";
 
 test("parses quoted model choices from wrapped help output", () => {
   const helpText = `

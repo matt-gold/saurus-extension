@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractContextFromText } from "../context";
+import { extractContextFromText } from "../core/suggestions";
 
 test("extracts bounded before/after context", () => {
   const text = "abcdefgHIJKLMNOPuvwxyz";

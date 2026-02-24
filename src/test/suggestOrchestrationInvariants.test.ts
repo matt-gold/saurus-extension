@@ -12,11 +12,11 @@ test("extension auto-trigger path does not directly hide suggest widget", () => 
   const extensionSource = readSourceFile("extension.ts");
   assert.equal(extensionSource.includes("\"hideSuggestWidget\""), false);
   assert.equal(extensionSource.includes("\"editor.action.triggerSuggest\""), false);
-  assert.match(extensionSource, /from "\.\/suggestWidgetCoordinator"/);
+  assert.match(extensionSource, /from "\.\/ui\/suggest"/);
 });
 
 test("generate more refresh path uses stabilized suggest refresh helper", () => {
-  const commandsSource = readSourceFile("commands.ts");
+  const commandsSource = readSourceFile("commands/registerSaurusCommands.ts");
   const runRefreshWithOptionalDirection = commandsSource.match(
     /const runRefreshWithOptionalDirection = async \([\s\S]*?\n\s+};/
   );
@@ -28,16 +28,16 @@ test("generate more refresh path uses stabilized suggest refresh helper", () => 
 });
 
 test("suggest widget command strings are owned by coordinator module", () => {
-  const coordinatorSource = readSourceFile("suggestWidgetCoordinator.ts");
+  const coordinatorSource = readSourceFile("ui/suggest/suggestWidgetCoordinator.ts");
   assert.match(coordinatorSource, /"editor\.action\.triggerSuggest"/);
   assert.match(coordinatorSource, /"hideSuggestWidget"/);
 });
 
 test("async source completion refresh path is shared across thesaurus and AI", () => {
-  const commandsSource = readSourceFile("commands.ts");
-  assert.match(commandsSource, /private setSourceSettledStateAndRefreshPopover\(/);
-  assert.match(commandsSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "thesaurus", "ready"/);
-  assert.match(commandsSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "thesaurus", "error"/);
-  assert.match(commandsSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "ai", "ready"/);
-  assert.equal(commandsSource.includes("if (needsAi) {\n              void triggerSuggestWidget();"), false);
+  const generationSource = readSourceFile("app/saurus/internal/SuggestionGenerationService.ts");
+  assert.match(generationSource, /private setSourceSettledStateAndRefreshPopover\(/);
+  assert.match(generationSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "thesaurus", "ready"/);
+  assert.match(generationSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "thesaurus", "error"/);
+  assert.match(generationSource, /setSourceSettledStateAndRefreshPopover\(suggestionKey, "ai", "ready"/);
+  assert.equal(generationSource.includes("if (needsAi) {\n              void triggerSuggestWidget();"), false);
 });

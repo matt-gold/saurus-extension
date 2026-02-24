@@ -1,0 +1,235 @@
+import * as vscode from "vscode";
+import { SaurusController } from "../../app";
+import { buildProviderItems } from "./internal/providerMenuModel";
+import { ThesaurusLookupInfo } from "../../types";
+
+function buildThesaurusDocumentation(info?: ThesaurusLookupInfo): vscode.MarkdownString {
+  const doc = new vscode.MarkdownString();
+  doc.isTrusted = false;
+  doc.supportHtml = false;
+
+  doc.appendMarkdown("**Merriam-Webster Thesaurus Response**\n\n");
+
+  if (!info) {
+    doc.appendMarkdown("_No thesaurus API response available yet._\n");
+    return doc;
+  }
+
+  doc.appendMarkdown(`- Provider: ${info.provider}\n`);
+  doc.appendMarkdown(`- Query: \`${info.query}\`\n`);
+  doc.appendMarkdown(`- Entries returned: ${info.entryCount}\n`);
+  doc.appendMarkdown(`- Suggestions extracted: ${info.suggestionCount}\n`);
+  if (info.partOfSpeech) {
+    doc.appendMarkdown(`- Part of speech: ${info.partOfSpeech}\n`);
+  }
+
+  if (info.definitions.length > 0) {
+    doc.appendMarkdown("\n**Definitions**\n");
+    for (const definition of info.definitions) {
+      doc.appendMarkdown(`- ${definition}\n`);
+    }
+  }
+
+  if (info.stems.length > 0) {
+    doc.appendMarkdown("\n**Stems**\n");
+    for (const stem of info.stems) {
+      doc.appendMarkdown(`- \`${stem}\`\n`);
+    }
+  }
+
+  if (info.didYouMean.length > 0) {
+    doc.appendMarkdown("\n**Did You Mean**\n");
+    for (const candidate of info.didYouMean) {
+      doc.appendMarkdown(`- ${candidate}\n`);
+    }
+  }
+
+  return doc;
+}
+
+function buildAiDocumentation(prompt?: string, model?: string, providerName?: string): vscode.MarkdownString {
+  const doc = new vscode.MarkdownString();
+  doc.isTrusted = false;
+  doc.supportHtml = false;
+
+  doc.appendMarkdown("**AI Prompt Context**\n\n");
+  doc.appendMarkdown("- Prompt setting key: `saurus.prompt.template`\n");
+  doc.appendMarkdown("- Model setting key: `saurus.ai.model`\n");
+  doc.appendMarkdown("- Edit it in Workspace/User Settings to change AI generation behavior.\n");
+  if (model && model.trim().length > 0) {
+    doc.appendMarkdown(`- Model used: \`${model.trim()}\`\n`);
+  } else {
+    doc.appendMarkdown(`- Model used: ${providerName ?? "Provider"} default (set \`saurus.ai.model\` to override)\n`);
+  }
+
+  if (!prompt || prompt.trim().length === 0) {
+    doc.appendMarkdown("\n_No AI prompt has been run for this placeholder yet._\n");
+    return doc;
+  }
+
+  doc.appendMarkdown("\n**Prompt used for the latest AI request**\n\n");
+  doc.appendCodeblock(prompt, "text");
+  return doc;
+}
+
+/** Bridges Saurus suggestions into the VS Code completion UI. */
+export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
+  public readonly onDidChangeCompletionItems: vscode.Event<void>;
+
+  public constructor(private readonly controller: SaurusController) {
+    this.onDidChangeCompletionItems = controller.onDidChangeCompletionItems;
+  }
+
+  public provideCompletionItems(
+    document: vscode.TextDocument,
+    position: vscode.Position
+  ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList<vscode.CompletionItem>> {
+    const lookup = this.controller.getCompletionLookup(document, position);
+    if (!lookup) {
+      return undefined;
+    }
+
+    const menuItems = buildProviderItems({
+      sourceStates: lookup.sourceStates,
+      sourceFilter: lookup.sourceFilter,
+      hasEntry: Boolean(lookup.entry),
+      thesaurusOptions: lookup.entry?.thesaurusOptions ?? [],
+      aiOptions: lookup.entry?.aiOptions ?? [],
+      thesaurusCached: lookup.entry?.thesaurusLastResponseCached ?? false,
+      aiCached: lookup.entry?.aiLastResponseCached ?? false,
+      aiLoadedCount: lookup.entry?.aiLoadedCount ?? (lookup.entry?.aiOptions.length ?? 0),
+      aiLastAddedCount: lookup.entry?.aiLastAddedCount ?? 0,
+      aiLastResponseCached: lookup.entry?.aiLastResponseCached ?? true,
+      aiProviderName: lookup.aiProviderName,
+      thesaurusProvider: lookup.thesaurusProvider,
+      thesaurusPrefix: lookup.thesaurusPrefix,
+      aiPrefix: lookup.aiPrefix,
+      placeholderRawText: lookup.match.rawFullText,
+      aiAutoRun: lookup.aiAutoRun,
+      aiActiveAction: lookup.aiActiveAction
+    });
+
+    if (menuItems.length === 0) {
+      return undefined;
+    }
+
+    const completionItems: vscode.CompletionItem[] = [];
+    const preferRefreshSelection = lookup.preferRefreshSelection;
+    let didPreselectAny = false;
+
+    for (const menuItem of menuItems) {
+      const item = new vscode.CompletionItem(menuItem.label, vscode.CompletionItemKind.Text);
+      item.filterText = lookup.match.rawFullText;
+      item.sortText = `${String(completionItems.length).padStart(4, "0")}-${menuItem.sortText}`;
+      item.detail = menuItem.detail;
+      if (menuItem.source === "thesaurus") {
+        item.documentation = buildThesaurusDocumentation(lookup.entry?.thesaurusInfo);
+      } else if (menuItem.source === "ai") {
+        item.documentation = buildAiDocumentation(
+          lookup.entry?.lastAiPrompt,
+          lookup.entry?.lastAiModel ?? lookup.aiConfiguredModel,
+          lookup.aiProviderName
+        );
+      }
+
+      if (menuItem.kind === "heading") {
+        // Hard-close row: remove delimiters and close suggestions.
+        item.insertText = "";
+        item.range = new vscode.Range(position, position);
+        if (!preferRefreshSelection) {
+          item.preselect = true;
+          didPreselectAny = true;
+        }
+        item.command = {
+          command: "saurus.exitPlaceholderSuggestions",
+          title: "Exit placeholder suggestions",
+          arguments: [
+            document.uri.toString(),
+            lookup.match.innerRange.start.line,
+            lookup.match.innerRange.start.character
+          ]
+        };
+        completionItems.push(item);
+        continue;
+      }
+
+      if (menuItem.kind === "refresh" || menuItem.kind === "refreshWithPrompt") {
+        // Keep this row command-only; do not edit document text.
+        item.insertText = "";
+        item.range = new vscode.Range(position, position);
+        if (menuItem.kind === "refresh" && preferRefreshSelection) {
+          item.preselect = true;
+          didPreselectAny = true;
+        }
+        item.command = menuItem.disabled
+          ? {
+            command: "saurus.reopenSuggestions",
+            title: "Continue suggestions",
+            arguments: [
+              document.uri.toString(),
+              lookup.match.innerRange.start.line,
+              lookup.match.innerRange.start.character
+            ]
+          }
+          : {
+            command: menuItem.kind === "refresh"
+              ? "saurus.refreshSuggestions"
+              : "saurus.refreshSuggestionsWithPrompt",
+            title: menuItem.kind === "refresh"
+              ? "Generate more"
+              : "Generate w/ prompt",
+            arguments: [
+              document.uri.toString(),
+              lookup.match.innerRange.start.line,
+              lookup.match.innerRange.start.character
+            ]
+          };
+        completionItems.push(item);
+        continue;
+      }
+
+      if (
+        menuItem.kind === "loading" ||
+        menuItem.kind === "empty"
+      ) {
+        // Simulate non-actionable separator/status rows inside the suggest list.
+        // Keep these rows command-only; do not edit document text.
+        item.insertText = "";
+        item.range = new vscode.Range(position, position);
+        item.command = {
+          command: "saurus.reopenSuggestions",
+          title: "Continue suggestions",
+          arguments: [
+            document.uri.toString(),
+            lookup.match.innerRange.start.line,
+            lookup.match.innerRange.start.character
+          ]
+        };
+        completionItems.push(item);
+        continue;
+      }
+
+      // Keep suggestion rows command-driven so all rows share a single
+      // completion range and VS Code ordering remains deterministic.
+      item.insertText = "";
+      item.range = new vscode.Range(position, position);
+      item.command = {
+        command: "saurus.applySuggestion",
+        title: "Apply suggestion",
+        arguments: [
+          document.uri.toString(),
+          lookup.match.innerRange.start.line,
+          lookup.match.innerRange.start.character,
+          menuItem.insertText
+        ]
+      };
+      if (!didPreselectAny && !preferRefreshSelection) {
+        item.preselect = true;
+        didPreselectAny = true;
+      }
+      completionItems.push(item);
+    }
+
+    return new vscode.CompletionList(completionItems, false);
+  }
+}

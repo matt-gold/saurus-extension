@@ -1,0 +1,1 @@
+export { registerConfigCommands } from "./registerConfigCommands";

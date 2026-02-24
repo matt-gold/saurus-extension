@@ -8,7 +8,7 @@ import {
   CopilotChatUnavailableError,
   mapCopilotChatError,
   selectFirstCopilotModel
-} from "../copilotChatCore";
+} from "../services/ai/copilotChatCore";
 
 test("buildCopilotChatSelectors uses model hint then vendor fallback", () => {
   assert.deepEqual(buildCopilotChatSelectors("gpt-4.1"), [

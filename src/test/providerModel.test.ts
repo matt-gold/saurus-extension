@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildProviderItems, BuildProviderItemsInput } from "../providerModel";
+import { buildProviderItems, BuildProviderItemsInput } from "../ui/completion/internal/providerMenuModel";
 
 function makeInput(overrides: Partial<BuildProviderItemsInput> = {}): BuildProviderItemsInput {
   return {

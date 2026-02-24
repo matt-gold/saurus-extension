@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findAllPlaceholdersInLine, findPlaceholderInLine } from "../placeholder";
+import {
+  findAllPlaceholdersInLine,
+  findPlaceholderInLine
+} from "../core/placeholder";
 
 test("finds placeholder in default delimiters", () => {
   const line = "The bell was {{silent}} at dusk.";
