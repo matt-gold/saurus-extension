@@ -229,16 +229,6 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
     const aiSuggestionDetail = input.aiCached
       ? `From ${input.aiProviderName} cache`
       : `From ${input.aiProviderName}`;
-    if (renderState.ai.showLoadingRow) {
-      items.push({
-        kind: "loading",
-        source: "ai",
-        label: withPrefix(input.aiPrefix, "$(loading~spin) Generating AI suggestions..."),
-        insertText: "",
-        detail: `Saurus is requesting options from ${input.aiProviderName}`,
-        sortText: "0200"
-      });
-    }
 
     if (renderState.ai.kind === "results") {
       pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
@@ -256,11 +246,11 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
     items.push({
       kind: "refresh",
       label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? "$(loading~spin) Getting more AI options..."
+        ? "$(loading~spin) Generating AI suggestions..."
         : "↻ Generate more",
       insertText: input.placeholderRawText,
       detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? `Getting more AI options from ${input.aiProviderName}`
+        ? `Saurus is requesting options from ${input.aiProviderName}`
         : `with ${input.aiProviderName}`,
       sortText: "9900",
       disabled: input.sourceStates.ai === "generating"

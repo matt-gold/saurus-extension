@@ -9,7 +9,6 @@ import {
 import { SuggestionResponse } from "../../types";
 
 /** Options for copilot chat request. */
-/** Options for copilot chat request. */
 export type CopilotChatRequestOptions = {
     prompt: string;
     model?: string;

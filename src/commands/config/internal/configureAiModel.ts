@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { getSettings } from "../../../config";
-import { discoverCliModels, getAiProviderLabel, isCliAiProvider } from "../../../services/ai";
-import { CliAiProviderKind } from "../../../types";
+import { discoverAiProviderModels, getAiProviderLabel } from "../../../services/ai";
 import { getConfigurationTarget } from "./getConfigurationTarget";
 
 interface ModelQuickPickItem extends vscode.QuickPickItem {
@@ -11,11 +10,6 @@ interface ModelQuickPickItem extends vscode.QuickPickItem {
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort((a, b) => a.localeCompare(b));
-}
-
-async function discoverCopilotChatModels(): Promise<string[]> {
-  const models = await vscode.lm.selectChatModels({ vendor: "copilot" });
-  return uniqueSorted(models.map((model) => model.id));
 }
 
 async function promptForCustomModel(currentModel?: string): Promise<string | undefined> {
@@ -47,18 +41,12 @@ export async function configureAiModelCommand(document?: vscode.TextDocument): P
   let discoveryWarning: string | undefined;
 
   try {
-    if (settings.aiProvider === "copilotChat") {
-      discoveredModels = await discoverCopilotChatModels();
-      discoveryDetail = "Discovered from VS Code Copilot Chat models";
-    } else if (isCliAiProvider(settings.aiProvider)) {
-      const { models, sourceLabel, warningMessage } = await discoverCliModels(
-        settings.aiProvider as CliAiProviderKind,
-        settings.aiPath
-      );
-      discoveredModels = models;
-      discoveryDetail = `Discovered from ${sourceLabel}`;
-      discoveryWarning = warningMessage;
-    }
+    const { models, sourceLabel, warningMessage } = await discoverAiProviderModels(settings.aiProvider, {
+      aiPath: settings.aiPath
+    });
+    discoveredModels = models;
+    discoveryDetail = `Discovered from ${sourceLabel}`;
+    discoveryWarning = warningMessage;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown model discovery error.";
     discoveryWarning = `Saurus: ${message}`;

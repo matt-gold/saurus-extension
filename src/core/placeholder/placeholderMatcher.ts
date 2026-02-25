@@ -2,7 +2,6 @@ import type * as vscode from "vscode";
 import { DelimiterPair, PlaceholderMatch } from "../../types";
 
 /** Describes line placeholder match. */
-/** Describes line placeholder match. */
 export type LinePlaceholderMatch = {
     start: number;
     end: number;

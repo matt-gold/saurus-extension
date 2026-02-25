@@ -15,7 +15,7 @@ const PERSISTED_CACHE_FILENAME = "saurus-cache-v1.json";
 
 /** Activates the Saurus extension and wires VS Code integrations. */
 export function activate(context: vscode.ExtensionContext): void {
-  const schemaPath = context.asAbsolutePath(path.join("resources", "ai-suggestions.schema.json"));
+  const schemaPath = context.asAbsolutePath(path.join("resources", "suggestions.schema.json"));
   const persistentCachePath = path.join(context.globalStorageUri.fsPath, PERSISTED_CACHE_FILENAME);
   const controller = new SaurusController({
     extensionContext: context,

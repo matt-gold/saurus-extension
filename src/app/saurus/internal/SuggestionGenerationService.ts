@@ -16,9 +16,7 @@ import {
   CopilotChatConsentRequiredError,
   CopilotChatRequestError,
   CopilotChatUnavailableError,
-  canUseCopilotChatInBackground,
-  generateSuggestionsWithAi,
-  generateSuggestionsWithCopilotChat
+  createAiSuggestionProvider
 } from "../../../services/ai";
 import {
   createThesaurusProvider,
@@ -139,8 +137,12 @@ export class SuggestionGenerationService {
     );
     const shouldRunThesaurus = sourceFilter !== "aiOnly" && settings.thesaurusEnabled;
     let aiAllowedForThisRun = true;
-    if (shouldRunAi && settings.aiProvider === "copilotChat" && !isUserInitiated) {
-      aiAllowedForThisRun = await canUseCopilotChatInBackground(this.deps.extensionContext, settings.aiModel);
+    if (shouldRunAi && !isUserInitiated) {
+      const aiProvider = createAiSuggestionProvider(settings.aiProvider);
+      aiAllowedForThisRun = await aiProvider.canGenerateInBackground({
+        extensionContext: this.deps.extensionContext,
+        model: settings.aiModel
+      });
     }
     const needsThesaurus = shouldRunThesaurus && !hasCachedThesaurus;
     const needsAi = aiAllowedForThisRun && shouldRunAi && (options.forceDifferent || !hasCachedAi);
@@ -382,26 +384,16 @@ export class SuggestionGenerationService {
     prompt: string,
     userInitiated: boolean
   ): Promise<SuggestionResponse> {
-    if (settings.aiProvider === "copilotChat") {
-      return generateSuggestionsWithCopilotChat({
-        model: settings.aiModel,
-        timeoutMs: settings.aiTimeoutMs,
-        prompt,
-        justification: userInitiated
-          ? "Saurus needs Copilot Chat to generate replacement suggestions for your placeholder."
-          : undefined
-      });
-    }
-
-    return generateSuggestionsWithAi({
-      aiProvider: settings.aiProvider,
-      aiPath: settings.aiPath,
+    const aiProvider = createAiSuggestionProvider(settings.aiProvider);
+    return aiProvider.generate({
+      prompt,
+      timeoutMs: settings.aiTimeoutMs,
       model: settings.aiModel,
       reasoningEffort: settings.aiReasoningEffort,
-      timeoutMs: settings.aiTimeoutMs,
+      aiPath: settings.aiPath,
       workspaceDir: this.resolveWorkspaceDir(document),
       schemaPath: this.deps.schemaPath,
-      prompt
+      userInitiated
     });
   }
 

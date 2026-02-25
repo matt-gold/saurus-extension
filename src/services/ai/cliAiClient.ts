@@ -4,34 +4,43 @@ import * as os from "os";
 import * as path from "path";
 import { getAiProviderLabel as getAiProviderDisplayLabel } from "./aiProviderCatalog";
 import { parseSuggestionResponse } from "./aiResponseParser";
+import { getCliAiProviderDefinition } from "./providers";
 import { AiProviderKind, AiReasoningEffort, CliAiProviderKind, SuggestionResponse } from "../../types";
+import type { CliAiProviderImplementation } from "./internal/cliProviders/types";
 
-/** Options for ai exec. */
-/** Options for ai exec. */
+/** Options for launching a CLI-backed AI provider. */
 export type AiExecOptions = {
-    aiProvider: CliAiProviderKind;
-    aiPath: string;
-    model?: string;
-    reasoningEffort?: AiReasoningEffort;
-    timeoutMs: number;
-    workspaceDir: string;
-    schemaPath: string;
+  aiProvider: CliAiProviderKind;
+  aiPath: string;
+  model?: string;
+  reasoningEffort?: AiReasoningEffort;
+  timeoutMs: number;
+  workspaceDir: string;
+  schemaPath: string;
 };
 
-/** Options for ai request. */
+/** Options for a CLI-backed AI suggestion request. */
 export interface AiRequestOptions extends AiExecOptions {
   prompt: string;
 }
 
 type CommandResult = {
-    code: number;
-    stdout: string;
-    stderr: string;
+  code: number;
+  stdout: string;
+  stderr: string;
 };
 
 type CommandEnvOverrides = Record<string, string>;
 
-/** Returns ai provider label. */
+function getCliProviderImplementation(provider: CliAiProviderKind): CliAiProviderImplementation<CliAiProviderKind> {
+  const implementation = getCliAiProviderDefinition(provider).cliImplementation;
+  if (!implementation) {
+    throw new Error(`CLI implementation not configured for provider: ${provider}`);
+  }
+  return implementation;
+}
+
+/** Returns the display label for an AI provider kind. */
 export function getAiProviderLabel(provider: AiProviderKind): string {
   return getAiProviderDisplayLabel(provider);
 }
@@ -40,46 +49,31 @@ function normalizeProviderLabel(provider: AiProviderKind): string {
   return getAiProviderDisplayLabel(provider);
 }
 
-function isGhWrapperCommand(command: string): boolean {
-  const base = path.basename(command).toLowerCase();
-  return base === "gh" || base === "gh.exe";
-}
-
-/** Represents a ai cli missing error. */
+/** Represents a missing CLI executable for a configured AI provider. */
 export class AiCliMissingError extends Error {
   public constructor(provider: CliAiProviderKind, message?: string) {
-    const label = normalizeProviderLabel(provider);
     if (message) {
       super(message);
-    } else if (provider === "copilot") {
-      super("Copilot CLI not found. Install GitHub Copilot CLI or set saurus.ai.path to gh.");
     } else {
-      super(`${label} CLI not found. Install ${label} CLI or update saurus.ai.path.`);
+      super(getCliProviderImplementation(provider).getMissingCliMessage());
     }
     this.name = "AiCliMissingError";
   }
 }
 
-/** Represents a ai auth error. */
+/** Represents an authentication error from a CLI-backed AI provider. */
 export class AiAuthError extends Error {
   public constructor(provider: CliAiProviderKind, message?: string) {
-    const label = normalizeProviderLabel(provider);
     if (message) {
       super(message);
-    } else if (provider === "codex") {
-      super("Codex CLI is not authenticated. Run `codex login` and try again.");
-    } else if (provider === "copilot") {
-      super("Copilot CLI is not authenticated. Run `gh auth login` (or sign in to Copilot CLI) and try again.");
-    } else if (provider === "claude") {
-      super("Claude CLI is not authenticated. Start `claude` and complete login, or set `ANTHROPIC_API_KEY`.");
     } else {
-      super(`${label} CLI is not authenticated. Log in and try again.`);
+      super(getCliProviderImplementation(provider).getAuthMessage());
     }
     this.name = "AiAuthError";
   }
 }
 
-/** Represents a ai request error. */
+/** Represents a request failure from a CLI-backed AI provider. */
 export class AiRequestError extends Error {
   public constructor(message: string) {
     super(message);
@@ -87,62 +81,28 @@ export class AiRequestError extends Error {
   }
 }
 
-/** Builds ai exec args. */
+/** Builds provider-specific CLI arguments for one AI request. */
 export function buildAiExecArgs(options: AiExecOptions, outputLastMessagePath: string, prompt: string): string[] {
-  if (options.aiProvider === "codex") {
-    const args = [
-      "exec",
-      "--ephemeral",
-      "--skip-git-repo-check",
-      "-C",
-      options.workspaceDir,
-      "--output-schema",
-      options.schemaPath,
-      "--output-last-message",
+  return getCliProviderImplementation(options.aiProvider)
+    .buildExecPlan({
+      aiPath: options.aiPath,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+      workspaceDir: options.workspaceDir,
+      schemaPath: options.schemaPath,
+      prompt,
       outputLastMessagePath
-    ];
-
-    if (options.reasoningEffort && options.reasoningEffort.trim().length > 0) {
-      args.push("-c", `model_reasoning_effort=${JSON.stringify(options.reasoningEffort.trim())}`);
-    }
-
-    if (options.model && options.model.trim().length > 0) {
-      args.push("--model", options.model.trim());
-    }
-
-    args.push("-");
-    return args;
-  }
-
-  if (options.aiProvider === "copilot") {
-    const args = isGhWrapperCommand(options.aiPath)
-      ? ["copilot", "--"]
-      : [];
-
-    if (options.model && options.model.trim().length > 0) {
-      args.push("--model", options.model.trim());
-    }
-    args.push("-s", "-p", prompt);
-    return args;
-  }
-
-  const args: string[] = [];
-  if (options.model && options.model.trim().length > 0) {
-    args.push("--model", options.model.trim());
-  }
-  args.push("-p", prompt);
-  return args;
+    })
+    .args;
 }
 
-/** Builds ai login status args. */
+/** Builds provider-specific login status args when a login check is supported. */
 export function buildAiLoginStatusArgs(provider: CliAiProviderKind, aiPath?: string): string[] | undefined {
-  if (provider === "codex") {
-    return ["login", "status"];
+  if (!aiPath) {
+    return undefined;
   }
-  if (provider === "copilot" && aiPath && isGhWrapperCommand(aiPath)) {
-    return ["auth", "status"];
-  }
-  return undefined;
+
+  return getCliProviderImplementation(provider).getLoginStatusBehavior?.(aiPath)?.args;
 }
 
 async function runCommand(
@@ -241,90 +201,58 @@ function maybeMapToAuthError(provider: CliAiProviderKind, stderr: string, stdout
   return undefined;
 }
 
-/** Builds ai env overrides. */
+/** Builds provider-specific environment overrides for a CLI AI request. */
 export function buildAiEnvOverrides(
   options: Pick<AiExecOptions, "aiProvider" | "reasoningEffort">
 ): CommandEnvOverrides | undefined {
-  if (options.aiProvider !== "claude") {
-    return undefined;
-  }
-
-  const overrides: CommandEnvOverrides = {};
-  switch (options.reasoningEffort) {
-    case "none":
-      // Claude Code supports disabling extended thinking via MAX_THINKING_TOKENS=0.
-      overrides.MAX_THINKING_TOKENS = "0";
-      break;
-    case "low":
-      overrides.CLAUDE_CODE_EFFORT_LEVEL = "low";
-      break;
-    case "medium":
-      overrides.CLAUDE_CODE_EFFORT_LEVEL = "medium";
-      break;
-    case "high":
-    case "xhigh":
-      overrides.CLAUDE_CODE_EFFORT_LEVEL = "high";
-      break;
-    default:
-      break;
-  }
-
-  return Object.keys(overrides).length > 0 ? overrides : undefined;
+  return getCliProviderImplementation(options.aiProvider).buildEnvOverrides?.(options.reasoningEffort);
 }
 
 async function ensureAiLoggedIn(options: AiExecOptions): Promise<void> {
-  const loginArgs = buildAiLoginStatusArgs(options.aiProvider, options.aiPath);
-  if (!loginArgs) {
+  const loginBehavior = getCliProviderImplementation(options.aiProvider).getLoginStatusBehavior?.(options.aiPath);
+  if (!loginBehavior) {
     return;
   }
 
   const result = await runCommand(
     options.aiPath,
-    loginArgs,
+    loginBehavior.args,
     options.workspaceDir,
     Math.min(10000, options.timeoutMs),
     options.aiProvider
   );
 
-  if (result.code !== 0) {
+  if (result.code !== 0 || !loginBehavior.isAuthenticated(result.stdout, result.stderr)) {
     throw new AiAuthError(options.aiProvider);
-  }
-
-  if (options.aiProvider === "codex") {
-    const output = `${result.stdout}\n${result.stderr}`;
-    if (!/logged in/i.test(output)) {
-      throw new AiAuthError(options.aiProvider);
-    }
-    return;
-  }
-
-  if (options.aiProvider === "copilot" && isGhWrapperCommand(options.aiPath)) {
-    const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
-    if (output.includes("not logged into any github hosts")) {
-      throw new AiAuthError(options.aiProvider);
-    }
-    return;
   }
 }
 
-/** Implements generate suggestions with ai. */
+/** Runs a suggestion request through a CLI-backed AI provider. */
 export async function generateSuggestionsWithAi(options: AiRequestOptions): Promise<SuggestionResponse> {
   await ensureAiLoggedIn(options);
 
+  const providerImplementation = getCliProviderImplementation(options.aiProvider);
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "saurus-"));
   const outputFile = path.join(tmpDir, "ai-last-message.json");
 
   try {
-    const args = buildAiExecArgs(options, outputFile, options.prompt);
-    const stdinPrompt = options.aiProvider === "codex" ? options.prompt : undefined;
-    const envOverrides = buildAiEnvOverrides(options);
+    const execPlan = providerImplementation.buildExecPlan({
+      aiPath: options.aiPath,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+      workspaceDir: options.workspaceDir,
+      schemaPath: options.schemaPath,
+      prompt: options.prompt,
+      outputLastMessagePath: outputFile
+    });
+    const envOverrides = providerImplementation.buildEnvOverrides?.(options.reasoningEffort);
     const result = await runCommand(
       options.aiPath,
-      args,
+      execPlan.args,
       options.workspaceDir,
       options.timeoutMs,
       options.aiProvider,
-      stdinPrompt,
+      execPlan.stdinPrompt,
       envOverrides
     );
 
@@ -335,7 +263,7 @@ export async function generateSuggestionsWithAi(options: AiRequestOptions): Prom
         );
     }
 
-    const raw = options.aiProvider === "codex"
+    const raw = execPlan.responseSource === "outputFile"
       ? await fs.readFile(outputFile, "utf8")
       : result.stdout;
 

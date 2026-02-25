@@ -1,13 +1,12 @@
 import * as vscode from "vscode";
+import type { AiProviderKind, CliAiProviderKind } from "./services/ai/providers";
+
+export type { AiProviderKind, CliAiProviderKind } from "./services/ai/providers";
 
 /** Describes generation state. */
 export type GenerationState = "idle" | "generating" | "ready" | "error";
 /** Describes ai reasoning effort. */
 export type AiReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
-/** Represents ai provider kinds. */
-export type AiProviderKind = "copilotChat" | "codex" | "copilot" | "claude";
-/** Represents cli ai provider kinds. */
-export type CliAiProviderKind = Exclude<AiProviderKind, "copilotChat">;
 /** Describes suggestion source. */
 export type SuggestionSource = "thesaurus" | "ai";
 /** Describes suggestion source filter. */

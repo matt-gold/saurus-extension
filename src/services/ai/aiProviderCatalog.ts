@@ -1,78 +1,44 @@
 import { AiProviderKind } from "../../types";
+import {
+  getAiProviderDefinition,
+  getDefaultAiProviderDefinition,
+  listAiProviderDefinitions
+} from "./providers";
+import type { AiProviderPreset } from "./providers/types";
 
-/** Default value for ai provider. */
-export const DEFAULT_AI_PROVIDER: AiProviderKind = "copilotChat";
+/** Default AI provider kind used when configuration is missing or invalid. */
+export const DEFAULT_AI_PROVIDER: AiProviderKind = getDefaultAiProviderDefinition().kind;
 
-/** Describes a built-in ai provider preset. */
-/** Describes a built-in ai provider preset. */
-export type AiProviderPreset = {
-    kind: AiProviderKind;
-    quickPickLabel: string;
-    displayLabel: string;
-    defaultPath: string;
-};
+/** Display metadata for a built-in AI provider option. */
+export type { AiProviderPreset } from "./providers/types";
 
-const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
-  {
-    kind: "copilotChat",
-    quickPickLabel: "Copilot Chat (default)",
-    displayLabel: "Copilot Chat",
-    defaultPath: ""
-  },
-  {
-    kind: "copilot",
-    quickPickLabel: "Copilot CLI",
-    displayLabel: "Copilot CLI",
-    defaultPath: "gh"
-  },
-  {
-    kind: "claude",
-    quickPickLabel: "Claude CLI",
-    displayLabel: "Claude",
-    defaultPath: "claude"
-  },
-  {
-    kind: "codex",
-    quickPickLabel: "Codex CLI",
-    displayLabel: "Codex",
-    defaultPath: "codex"
-  }
-] as const;
-
-function getPreset(provider: AiProviderKind): AiProviderPreset | undefined {
-  return AI_PROVIDER_PRESETS.find((preset) => preset.kind === provider);
-}
-
-const AI_PROVIDER_ALIASES: Record<string, AiProviderKind> = {
-  copilotchat: "copilotChat",
-  "copilot-chat": "copilotChat",
-  copilot: "copilot",
-  codex: "codex",
-  claude: "claude"
-};
-
-/** Implements sanitize ai provider. */
+/** Normalizes a configured AI provider string to a known provider kind. */
 export function sanitizeAiProvider(input: string): AiProviderKind {
   const normalized = input.trim().toLowerCase();
-  return AI_PROVIDER_ALIASES[normalized] ?? DEFAULT_AI_PROVIDER;
+  for (const definition of listAiProviderDefinitions()) {
+    if (definition.aliases.some((alias) => alias.toLowerCase() === normalized)) {
+      return definition.kind;
+    }
+  }
+  return DEFAULT_AI_PROVIDER;
 }
 
-/** Returns default ai path. */
+/** Returns the default executable path for a provider kind. */
 export function getDefaultAiPath(provider: AiProviderKind): string {
-  return getPreset(provider)?.defaultPath ?? "codex";
+  return getAiProviderDefinition(provider).preset.defaultPath;
 }
 
-/** Returns ai provider label. */
+/** Returns the display label for a provider kind. */
 export function getAiProviderLabel(provider: AiProviderKind): string {
-  return getPreset(provider)?.displayLabel ?? provider;
+  return getAiProviderDefinition(provider).preset.displayLabel;
 }
 
-/** Returns whether cli ai provider. */
+/** Returns whether a provider kind is CLI-backed. */
 export function isCliAiProvider(provider: AiProviderKind): boolean {
-  return provider !== "copilotChat";
+  return getAiProviderDefinition(provider).isCli;
 }
 
-/** Implements list ai provider presets. */
+/** Lists AI provider presets in UI display order. */
 export function listAiProviderPresets(): readonly AiProviderPreset[] {
-  return AI_PROVIDER_PRESETS;
+  return listAiProviderDefinitions().map((definition) => definition.preset);
 }

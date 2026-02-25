@@ -1,14 +1,33 @@
 export {
-  CLAUDE_CLI_FALLBACK_MODELS,
-  CODEX_CLI_FALLBACK_MODELS,
-  COPILOT_CLI_FALLBACK_MODELS,
+  createAiSuggestionProvider
+} from "./aiSuggestionProvider";
+export type {
+  AiProviderBackgroundCheckOptions,
+  AiProviderGenerateRequest,
+  AiSuggestionProvider
+} from "./aiSuggestionProvider";
+
+export {
   AiModelDiscoveryError,
+  discoverAiProviderModels,
   discoverCliModels,
   getCliModelDiscoveryCommand,
   parseCodexModelsCache,
   parseModelChoicesFromHelp
 } from "./aiModelDiscovery";
 export type { CliModelDiscoveryCommand, ModelDiscoveryResult } from "./aiModelDiscovery";
+
+export {
+  CLAUDE_PROVIDER_DEFINITION,
+  CODEX_PROVIDER_DEFINITION,
+  COPILOT_CHAT_PROVIDER_DEFINITION,
+  COPILOT_CLI_PROVIDER_DEFINITION
+} from "./providers";
+export type {
+  AiProviderDefinition,
+  AiProviderModelDiscoveryOptions,
+  AiProviderModelDiscoveryResult
+} from "./providers";
 
 export {
   DEFAULT_AI_PROVIDER,
