@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addSuggestionsToSeen, dedupeSuggestions, normalizeSuggestion } from "../normalize";
+import {
+  addSuggestionsToSeen,
+  dedupeSuggestions,
+  normalizeSuggestion
+} from "../core/suggestions";
 
 test("normalization collapses punctuation and spacing", () => {
   const normalized = normalizeSuggestion("  Bell,   toll! ");

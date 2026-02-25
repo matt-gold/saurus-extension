@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendDirectionGuidance, formatAvoidSuggestions, renderPromptTemplate } from "../prompt";
+import {
+  appendDirectionGuidance,
+  formatAvoidSuggestions,
+  renderPromptTemplate
+} from "../core/suggestions";
 
 test("renders prompt variables", () => {
   const template = "A:${placeholder}|B:${contextBefore}|C:${contextAfter}|N:${suggestionCount}|X:${avoidSuggestions}";

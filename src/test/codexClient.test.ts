@@ -6,7 +6,7 @@ import {
   buildAiExecArgs,
   buildAiLoginStatusArgs,
   getAiProviderLabel
-} from "../codexClient";
+} from "../services/ai/cliAiClient";
 
 test("buildAiExecArgs includes codex schema output flags", () => {
   const args = buildAiExecArgs(

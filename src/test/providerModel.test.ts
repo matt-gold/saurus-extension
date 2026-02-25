@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildProviderItems, BuildProviderItemsInput } from "../providerModel";
+import { buildProviderItems, BuildProviderItemsInput } from "../ui/completion/internal/providerMenuModel";
 
 function makeInput(overrides: Partial<BuildProviderItemsInput> = {}): BuildProviderItemsInput {
   return {
@@ -112,7 +112,7 @@ test("shows disabled generate actions while AI refresh is active", () => {
   }));
 
   const aiLoading = items.find((item) => item.kind === "loading" && item.source === "ai");
-  assert.ok(aiLoading);
+  assert.equal(aiLoading, undefined);
   assert.equal(
     items.some((item) => item.kind === "empty" && item.source === "ai"),
     false,
@@ -121,7 +121,8 @@ test("shows disabled generate actions while AI refresh is active", () => {
 
   const refresh = items.find((item) => item.kind === "refresh");
   assert.ok(refresh);
-  assert.equal(refresh?.label, "$(loading~spin) Getting more AI options...");
+  assert.equal(refresh?.label, "$(loading~spin) Generating AI suggestions...");
+  assert.equal(refresh?.detail, "Saurus is requesting options from Codex");
   assert.equal(refresh?.disabled, true);
 
   const withPrompt = items.find((item) => item.kind === "refreshWithPrompt");
@@ -170,7 +171,7 @@ test("keeps action rows visible and last while AI is loading with existing resul
   assert.deepEqual(tail.map((item) => item.kind), ["refresh", "refreshWithPrompt"]);
   assert.equal(items.at(-2)?.disabled, true);
   assert.equal(items.at(-1)?.disabled, true);
-  assert.equal(items.some((item) => item.kind === "loading" && item.source === "ai"), true);
+  assert.equal(items.some((item) => item.kind === "loading" && item.source === "ai"), false);
 });
 
 test("formats ai detail as only new when no cached results yet", () => {

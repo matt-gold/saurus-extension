@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __testOnly, extractThesaurusLookupTerm } from "../thesaurusClient";
+import { extractThesaurusLookupTerm } from "../core/suggestions";
+import { __testOnly } from "../services/thesaurus";
 
 test("extractThesaurusLookupTerm keeps the full placeholder text", () => {
   assert.equal(extractThesaurusLookupTerm("a dimly lit chamber"), "a dimly lit chamber");

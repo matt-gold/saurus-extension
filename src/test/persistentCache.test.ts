@@ -9,7 +9,7 @@ import {
   pruneExpiredEntries,
   savePersistedCache,
   serializeEntry
-} from "../persistentCache";
+} from "../state";
 import { SuggestionCacheEntry } from "../types";
 
 function buildEntry(overrides: Partial<SuggestionCacheEntry> = {}): SuggestionCacheEntry {

@@ -1,0 +1,1 @@
+export { PlaceholderHighlighter } from "./PlaceholderHighlighter";

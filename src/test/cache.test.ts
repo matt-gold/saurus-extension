@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SuggestionCache } from "../cache";
+import { SuggestionCache } from "../state";
 
 test("clears entries by document uri", () => {
   const cache = new SuggestionCache();

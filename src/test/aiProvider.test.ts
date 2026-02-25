@@ -4,7 +4,7 @@ import {
   DEFAULT_AI_PROVIDER,
   getDefaultAiPath,
   sanitizeAiProvider
-} from "../aiProvider";
+} from "../services/ai/aiProviderCatalog";
 
 test("default AI provider is copilotChat", () => {
   assert.equal(DEFAULT_AI_PROVIDER, "copilotChat");

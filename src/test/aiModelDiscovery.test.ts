@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  CLAUDE_CLI_FALLBACK_MODELS,
-  CODEX_CLI_FALLBACK_MODELS,
   discoverCliModels,
   getCliModelDiscoveryCommand,
   parseCodexModelsCache,
   parseModelChoicesFromHelp
-} from "../aiModelDiscovery";
+} from "../services/ai/aiModelDiscovery";
+import { CLAUDE_PROVIDER_MODELS } from "../services/ai/providers/claudeProvider";
+import { CODEX_PROVIDER_FALLBACK_MODELS } from "../services/ai/providers/codexProvider";
 
 test("parses quoted model choices from wrapped help output", () => {
   const helpText = `
@@ -62,11 +62,11 @@ test("claude model discovery uses hardcoded list", async () => {
   const result = await discoverCliModels("claude", "claude");
   assert.equal(result.usedFallback, false);
   assert.equal(result.sourceLabel, "Built-in Claude model list");
-  assert.deepEqual(result.models, [...CLAUDE_CLI_FALLBACK_MODELS]);
+  assert.deepEqual(result.models, [...CLAUDE_PROVIDER_MODELS]);
 });
 
 test("codex fallback list contains expected modern codex variants", () => {
-  assert.deepEqual(CODEX_CLI_FALLBACK_MODELS.slice(-4), [
+  assert.deepEqual(CODEX_PROVIDER_FALLBACK_MODELS.slice(-4), [
     "gpt-5.1-codex-mini",
     "gpt-5.2",
     "gpt-5.2-codex",

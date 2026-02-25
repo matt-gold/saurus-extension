@@ -1,13 +1,34 @@
+import * as path from "path";
 import * as vscode from "vscode";
-import { SaurusController } from "./commands";
-import { registerConfigCommands } from "./configCommands";
-import { findPlaceholderAtPosition } from "./placeholder";
-import { SaurusCompletionProvider } from "./provider";
-import { PlaceholderHighlighter } from "./highlight";
-import { triggerSuggestWidget } from "./suggestWidgetCoordinator";
+import { SaurusController } from "./app";
+import { PersistentCacheCoordinator } from "./app/saurus/internal/PersistentCacheCoordinator";
+import { PlaceholderEditActions } from "./app/saurus/internal/PlaceholderEditActions";
+import { SuggestionGenerationService } from "./app/saurus/internal/SuggestionGenerationService";
+import { registerSaurusCommands } from "./commands";
+import { registerConfigCommands } from "./commands/config";
+import { findPlaceholderAtPosition } from "./core/placeholder";
+import { SaurusCompletionProvider } from "./ui/completion";
+import { PlaceholderHighlighter } from "./ui/highlight";
+import { triggerSuggestWidget } from "./ui/suggest";
 
+const PERSISTED_CACHE_FILENAME = "saurus-cache-v1.json";
+
+/** Activates the Saurus extension and wires VS Code integrations. */
 export function activate(context: vscode.ExtensionContext): void {
-  const controller = new SaurusController(context);
+  const schemaPath = context.asAbsolutePath(path.join("resources", "suggestions.schema.json"));
+  const persistentCachePath = path.join(context.globalStorageUri.fsPath, PERSISTED_CACHE_FILENAME);
+  const controller = new SaurusController({
+    extensionContext: context,
+    schemaPath,
+    persistentCachePath,
+    factories: {
+      createPersistentCacheCoordinator: (deps) => new PersistentCacheCoordinator(deps),
+      createPlaceholderEditActions: (deps) => new PlaceholderEditActions(deps),
+      createSuggestionGenerationService: (deps) => new SuggestionGenerationService(deps)
+    }
+  });
+  controller.initialize();
+
   const provider = new SaurusCompletionProvider(controller);
   const highlighter = new PlaceholderHighlighter(controller);
   context.subscriptions.push(controller);
@@ -19,7 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, provider));
   context.subscriptions.push(highlighter);
-  controller.registerCommands(context.subscriptions);
+  registerSaurusCommands(controller, context.subscriptions);
   registerConfigCommands(context.subscriptions);
 
   const lastSuggestionKeyByDocument = new Map<string, string | undefined>();
@@ -136,7 +157,6 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const previousKey = lastSuggestionKeyByDocument.get(documentUri);
-
       lastSuggestionKeyByDocument.set(documentUri, currentKey);
 
       if (!currentKey) {
@@ -172,6 +192,7 @@ export function activate(context: vscode.ExtensionContext): void {
   highlighter.refreshVisibleEditors();
 }
 
+/** Runs extension shutdown cleanup when VS Code unloads Saurus. */
 export function deactivate(): void {
   // Nothing to dispose here; VS Code handles subscription disposal.
 }
