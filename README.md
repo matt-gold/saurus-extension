@@ -10,7 +10,7 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
 
 <div align="center">
   <video
-    src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4"
+    src="https://raw.githubusercontent.com/matt-gold/saurus-extension/main/assets/saurus-demo.mp4"
     controls
     muted
     playsinline
@@ -20,8 +20,8 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
 </div>
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4">
-    <img src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.gif" alt="Saurus demo preview" width="100%" />
+  <a href="https://raw.githubusercontent.com/matt-gold/saurus-extension/main/assets/saurus-demo.mp4">
+    <img src="https://raw.githubusercontent.com/matt-gold/saurus-extension/main/assets/saurus-demo.gif" alt="Saurus demo preview" width="100%" />
   </a>
 </p>
 
