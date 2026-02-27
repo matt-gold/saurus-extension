@@ -24,7 +24,7 @@
 </p>
 
 
-It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
+It highlights placeholders (`{{...}}`) in your text and provides replacement options on click. By default it prioritizes thesaurus results first, and is designed to avoid AI-slop by targeting single words or short phrases.
 
 ## Key Workflows
 
