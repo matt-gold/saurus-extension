@@ -6,8 +6,6 @@
 
 `Saurus` is an AI-second writing tool designed to keep you in the flow when writing with VSCode.
 
-It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
-
 <div align="center">
   <video
     src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.mp4"
@@ -24,6 +22,9 @@ It detects placeholders (default `{{...}}`) and shows replacement options in the
     <img src="https://raw.githubusercontent.com/matt-gold/saurus/main/assets/saurus-demo.gif" alt="Saurus demo preview" width="100%" />
   </a>
 </p>
+
+
+It detects placeholders (default `{{...}}`) and shows replacement options in the native completion popover at the cursor. It prioritizes thesaurus results first, keeps AI as opt-in or configurable auto-run, and is designed to avoid slop by targeting single words or short phrases.
 
 ## Key Workflows
 
