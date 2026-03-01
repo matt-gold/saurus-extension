@@ -342,6 +342,14 @@ export class SaurusController implements vscode.Disposable {
     this.problemFinderService.ignoreProblem(uriString, problemId);
   }
 
+  public fixProblem(uriString?: string, problemId?: string): void {
+    this.problemFinderService.fixProblem(uriString, problemId);
+  }
+
+  public async convertProblemToStegoComment(uriString?: string, problemId?: string): Promise<void> {
+    await this.problemFinderService.convertProblemToStegoComment(uriString, problemId);
+  }
+
   public clearProblemsForDocument(document: vscode.TextDocument): void {
     this.problemFinderService.clearProblemsForDocument(document);
   }

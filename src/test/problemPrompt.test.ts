@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { renderProblemPromptTemplate } from "../core/problems";
 
 test("renders known problem prompt variables", () => {
-  const template = "T:${targetText}|L:${contextLeft}|R:${contextRight}|N:${issueCount}|S:${scope}";
+  const template = "T:${targetText}|L:${contextLeft}|R:${contextRight}|D:${dismissedIssues}|N:${issueCount}|S:${scope}";
   const rendered = renderProblemPromptTemplate(template, {
     targetText: "Selected sentence.",
     contextLeft: "Left",
     contextRight: "Right",
+    dismissedIssues: "1. [tone] Should this line be less formal?",
     issueCount: 12,
     fileName: "draft.md",
     languageId: "markdown",
@@ -17,6 +18,7 @@ test("renders known problem prompt variables", () => {
   assert.match(rendered, /T:Selected sentence\./);
   assert.match(rendered, /L:Left/);
   assert.match(rendered, /R:Right/);
+  assert.match(rendered, /D:1\. \[tone\] Should this line be less formal\?/);
   assert.match(rendered, /N:12/);
   assert.match(rendered, /S:selection/);
 });
@@ -27,6 +29,7 @@ test("preserves unknown tokens", () => {
     targetText: "Body",
     contextLeft: "",
     contextRight: "",
+    dismissedIssues: "",
     issueCount: 5,
     fileName: "draft.md",
     languageId: "markdown",
@@ -42,6 +45,7 @@ test("handles empty context safely", () => {
     targetText: "Body",
     contextLeft: "",
     contextRight: "",
+    dismissedIssues: "",
     issueCount: 5,
     fileName: "draft.md",
     languageId: "markdown",

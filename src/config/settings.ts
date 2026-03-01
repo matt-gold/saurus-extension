@@ -39,6 +39,7 @@ Rules:
 - endOffset must be greater than startOffset.
 - Keep fixHint concise and actionable.
 - Rank issues by impact (most important first).
+- Do not repeat issues listed under "Previously dismissed issues" unless the text has materially changed and the concern is genuinely new.
 - If there are no meaningful issues, return {"issues":[]}.
 
 Scope: ${"${scope}"}
@@ -53,6 +54,9 @@ ${"${contextLeft}"}
 
 Context right:
 ${"${contextRight}"}
+
+Previously dismissed issues:
+${"${dismissedIssues}"}
 `;
 
 function clampNumber(value: number, min: number, max: number): number {

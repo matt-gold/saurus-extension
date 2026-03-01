@@ -68,6 +68,7 @@ test("manifest contributes problem finder settings defaults", () => {
   assert.equal(typeof template.default, "string");
   assert.match(template.default as string, /Do not report spelling or typo issues\./);
   assert.match(template.default as string, /constructive question/i);
+  assert.match(template.default as string, /Previously dismissed issues/i);
 
   const maxIssues = properties["saurus.problemFinder.maxIssues"];
   assert.ok(maxIssues);

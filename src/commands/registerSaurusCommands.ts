@@ -229,6 +229,18 @@ export function registerSaurusCommands(
   );
 
   subscriptions.push(
+    vscode.commands.registerCommand("saurus.fixProblem", async (uriString?: string, problemId?: string) => {
+      controller.fixProblem(uriString, problemId);
+    })
+  );
+
+  subscriptions.push(
+    vscode.commands.registerCommand("saurus.convertProblemToStegoComment", async (uriString?: string, problemId?: string) => {
+      await controller.convertProblemToStegoComment(uriString, problemId);
+    })
+  );
+
+  subscriptions.push(
     vscode.commands.registerCommand("saurus.refreshSuggestions", async (uri?: string, line?: number, character?: number) => {
       await runRefreshWithOptionalDirection(undefined, uri, line, character);
     })

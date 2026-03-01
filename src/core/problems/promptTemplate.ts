@@ -3,6 +3,7 @@ export type ProblemPromptVariables = {
   targetText: string;
   contextLeft: string;
   contextRight: string;
+  dismissedIssues: string;
   issueCount: number;
   fileName: string;
   languageId: string;
@@ -17,6 +18,7 @@ export function renderProblemPromptTemplate(template: string, variables: Problem
     contextRight: variables.contextRight,
     contextBefore: variables.contextLeft,
     contextAfter: variables.contextRight,
+    dismissedIssues: variables.dismissedIssues,
     issueCount: String(variables.issueCount),
     fileName: variables.fileName,
     languageId: variables.languageId,

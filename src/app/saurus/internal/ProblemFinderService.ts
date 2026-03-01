@@ -1,4 +1,6 @@
+import * as fs from "fs";
 import * as path from "path";
+import { spawn } from "child_process";
 import * as vscode from "vscode";
 import {
   ProblemContentChange,
@@ -31,24 +33,52 @@ type HoverProblemEntry = {
   range: vscode.Range;
 };
 
+type DismissedProblemEntry = {
+  key: string;
+  category: ProblemIssue["category"];
+  normalizedQuestion: string;
+  normalizedFlaggedText: string;
+  summary: string;
+};
+
 type DiagnoseRunResult = {
   trackedIssues: TrackedProblemIssue[];
   skippedFindings: number;
 };
 
+type StegoIntegrationContext = {
+  projectRoot: string;
+  manuscriptPath: string;
+};
+
+type StegoAddCommentResponse = {
+  ok?: boolean;
+  commentId?: string;
+  message?: string;
+};
+
 const PROBLEM_FINDER_TARGET_CHAR_CAP = 12000;
 const IGNORE_PROBLEM_COMMAND = "saurus.ignoreProblem";
+const FIX_PROBLEM_COMMAND = "saurus.fixProblem";
+const CONVERT_PROBLEM_TO_STEGO_COMMENT_COMMAND = "saurus.convertProblemToStegoComment";
 const PROBLEM_FINDER_IN_PROGRESS_MESSAGE = "Saurus: diagnosis already in progress. Please wait for it to finish.";
 const CLOSE_HOVER_COMMAND = "editor.action.closeHover";
+const CLOSE_HOVER_RETRY_DELAY_MS = 40;
+const DISMISSED_ISSUE_HISTORY_LIMIT = 50;
+const DISMISSED_ISSUE_PROMPT_LIMIT = 20;
+const DISMISSED_ISSUE_PROMPT_CHAR_LIMIT = 1800;
+const STEGO_CLI_COMMAND = "stego";
+const STEGO_COMMAND_TIMEOUT_MS = 30000;
 
 const HIGH_SEVERITY_UNDERLINE_COLOR = "rgba(239, 68, 68, 0.95)";
 const MEDIUM_SEVERITY_UNDERLINE_COLOR = "rgba(245, 158, 11, 0.95)";
-const LOW_SEVERITY_UNDERLINE_COLOR = "rgba(59, 130, 246, 0.95)";
+const LOW_SEVERITY_UNDERLINE_COLOR = "rgba(14, 116, 255, 1)";
 
 /** Finds writing problems via AI and renders tracked hover decorations. */
 export class ProblemFinderService implements vscode.Disposable {
   private inFlight = false;
   private readonly tracker = new ProblemRangeTracker();
+  private readonly dismissedIssuesByUri = new Map<string, DismissedProblemEntry[]>();
   private readonly highSeverityDecoration = vscode.window.createTextEditorDecorationType({
     textDecoration: `underline wavy ${HIGH_SEVERITY_UNDERLINE_COLOR}`,
     rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
@@ -58,7 +88,7 @@ export class ProblemFinderService implements vscode.Disposable {
     rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
   });
   private readonly lowSeverityDecoration = vscode.window.createTextEditorDecorationType({
-    textDecoration: `underline dotted ${LOW_SEVERITY_UNDERLINE_COLOR}`,
+    textDecoration: `underline wavy ${LOW_SEVERITY_UNDERLINE_COLOR}`,
     rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
   });
 
@@ -67,6 +97,7 @@ export class ProblemFinderService implements vscode.Disposable {
   public dispose(): void {
     this.clearAllDecorations();
     this.tracker.clearAll();
+    this.dismissedIssuesByUri.clear();
     this.highSeverityDecoration.dispose();
     this.mediumSeverityDecoration.dispose();
     this.lowSeverityDecoration.dispose();
@@ -119,8 +150,92 @@ export class ProblemFinderService implements vscode.Disposable {
   }
 
   public ignoreProblem(uriString?: string, problemId?: string): void {
+    this.removeProblem(uriString, problemId, true);
+  }
+
+  public fixProblem(uriString?: string, problemId?: string): void {
+    this.removeProblem(uriString, problemId, false);
+  }
+
+  public async convertProblemToStegoComment(uriString?: string, problemId?: string): Promise<void> {
     if (!uriString || !problemId) {
       return;
+    }
+
+    const tracked = this.tracker.getTracked(uriString) ?? [];
+    const target = tracked.find((entry) => entry.id === problemId && !entry.deleted);
+    if (!target) {
+      this.closeHoverPopover();
+      return;
+    }
+
+    const document = await this.resolveDocument(uriString);
+    if (!document) {
+      void vscode.window.showErrorMessage("Saurus: could not load the document for Stego comment conversion.");
+      return;
+    }
+
+    const stegoContext = this.resolveStegoIntegrationContext(document);
+    if (!stegoContext) {
+      void vscode.window.showInformationMessage(
+        "Saurus: Convert to Stego comment is only available for manuscript files in a Stego project."
+      );
+      return;
+    }
+
+    const payload = {
+      message: this.buildStegoCommentMessage(target.issue),
+      author: "Saurus",
+      range: {
+        start: {
+          line: target.start.line,
+          col: target.start.character
+        },
+        end: {
+          line: target.end.line,
+          col: target.end.character
+        }
+      },
+      meta: {
+        source: "saurus",
+        kind: "diagnosis",
+        problemId: target.id,
+        severity: target.issue.severity,
+        category: target.issue.category
+      }
+    };
+
+    try {
+      const result = await vscode.window.withProgress<StegoAddCommentResponse>(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Saurus",
+          cancellable: false
+        },
+        async (progress) => {
+          progress.report({ message: "Converting diagnosis to Stego comment..." });
+          return this.runStegoAddComment(stegoContext, payload);
+        }
+      );
+
+      this.removeProblem(uriString, problemId, false);
+      const suffix = result.commentId ? ` (${result.commentId})` : "";
+      void vscode.window.showInformationMessage(`Saurus: Converted to Stego comment${suffix}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Saurus: failed to convert to Stego comment. ${message}`);
+    }
+  }
+
+  private removeProblem(uriString?: string, problemId?: string, suppressFutureDiagnosis?: boolean): void {
+    if (!uriString || !problemId) {
+      return;
+    }
+
+    const tracked = this.tracker.getTracked(uriString) ?? [];
+    const dismissedIssue = tracked.find((entry) => entry.id === problemId)?.issue;
+    if (dismissedIssue && suppressFutureDiagnosis) {
+      this.recordDismissedIssue(uriString, dismissedIssue);
     }
 
     this.tracker.removeIssue(uriString, problemId);
@@ -135,7 +250,7 @@ export class ProblemFinderService implements vscode.Disposable {
       }
     }
 
-    void vscode.commands.executeCommand(CLOSE_HOVER_COMMAND).then(undefined, () => undefined);
+    this.closeHoverPopover();
   }
 
   public async findProblems(editor: vscode.TextEditor): Promise<void> {
@@ -212,6 +327,7 @@ export class ProblemFinderService implements vscode.Disposable {
         targetText: analyzedText,
         contextLeft: surroundingContext.contextBefore,
         contextRight: surroundingContext.contextAfter,
+        dismissedIssues: this.buildDismissedIssuesPrompt(document.uri.toString()),
         issueCount: issueCountForRun,
         fileName: path.basename(document.fileName),
         languageId: document.languageId,
@@ -241,7 +357,8 @@ export class ProblemFinderService implements vscode.Disposable {
               userInitiated: true
             });
 
-            const issues = response.issues.slice(0, issueCountForRun);
+            const filteredByDismissed = this.filterDismissedIssues(document.uri.toString(), response.issues);
+            const issues = filteredByDismissed.slice(0, issueCountForRun);
             const resolution = resolveProblemIssueRanges({
               analyzedText,
               issues
@@ -423,6 +540,211 @@ export class ProblemFinderService implements vscode.Disposable {
     return hashText(`${uri}:${startOffset}:${endOffset}:${index}:${issue.question}:${issue.rationale}`);
   }
 
+  private closeHoverPopover(): void {
+    const closeHover = () => {
+      void vscode.commands.executeCommand(CLOSE_HOVER_COMMAND).then(undefined, () => undefined);
+    };
+
+    closeHover();
+    setTimeout(closeHover, CLOSE_HOVER_RETRY_DELAY_MS);
+  }
+
+  private recordDismissedIssue(uriString: string, issue: ProblemIssue): void {
+    const dismissedEntry = toDismissedProblemEntry(issue);
+    const existing = this.dismissedIssuesByUri.get(uriString) ?? [];
+    if (existing.some((entry) => entry.key === dismissedEntry.key)) {
+      return;
+    }
+
+    existing.push(dismissedEntry);
+    if (existing.length > DISMISSED_ISSUE_HISTORY_LIMIT) {
+      existing.splice(0, existing.length - DISMISSED_ISSUE_HISTORY_LIMIT);
+    }
+
+    this.dismissedIssuesByUri.set(uriString, existing);
+  }
+
+  private buildDismissedIssuesPrompt(uriString: string): string {
+    const entries = this.dismissedIssuesByUri.get(uriString) ?? [];
+    if (entries.length === 0) {
+      return "(none)";
+    }
+
+    const recent = entries.slice(-DISMISSED_ISSUE_PROMPT_LIMIT);
+    const lines = recent.map((entry, index) => `${index + 1}. [${entry.category}] ${entry.summary}`);
+    const value = lines.join("\n");
+    if (value.length <= DISMISSED_ISSUE_PROMPT_CHAR_LIMIT) {
+      return value;
+    }
+
+    return `${value.slice(0, DISMISSED_ISSUE_PROMPT_CHAR_LIMIT - 3).trimEnd()}...`;
+  }
+
+  private filterDismissedIssues(uriString: string, issues: ProblemIssue[]): ProblemIssue[] {
+    const dismissedEntries = this.dismissedIssuesByUri.get(uriString) ?? [];
+    if (dismissedEntries.length === 0) {
+      return issues;
+    }
+
+    return issues.filter((issue) => !isDismissedIssueMatch(issue, dismissedEntries));
+  }
+
+  private async resolveDocument(uriString: string): Promise<vscode.TextDocument | undefined> {
+    const existing = vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uriString);
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      return await vscode.workspace.openTextDocument(vscode.Uri.parse(uriString));
+    } catch {
+      return undefined;
+    }
+  }
+
+  private buildStegoCommentMessage(issue: ProblemIssue): string {
+    return [
+      issue.question,
+      "",
+      `Why it matters: ${issue.rationale}`,
+      `Fix hint: ${issue.fixHint}`,
+      `Severity: ${toSeverityLabel(issue.severity)}`
+    ].join("\n");
+  }
+
+  private resolveStegoIntegrationContext(document: vscode.TextDocument): StegoIntegrationContext | undefined {
+    if (document.uri.scheme !== "file") {
+      return undefined;
+    }
+
+    const normalizedFileName = document.fileName.toLowerCase();
+    if (!normalizedFileName.endsWith(".md")) {
+      return undefined;
+    }
+
+    let currentDir = path.dirname(document.fileName);
+    let stegoProjectRoot: string | undefined;
+    while (true) {
+      const projectManifestPath = path.join(currentDir, "stego-project.json");
+      if (fs.existsSync(projectManifestPath)) {
+        stegoProjectRoot = currentDir;
+        break;
+      }
+
+      const parent = path.dirname(currentDir);
+      if (parent === currentDir) {
+        break;
+      }
+
+      currentDir = parent;
+    }
+
+    if (!stegoProjectRoot) {
+      return undefined;
+    }
+
+    const relativePath = path.relative(stegoProjectRoot, document.fileName);
+    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      return undefined;
+    }
+
+    const manuscriptPath = relativePath.split(path.sep).join("/");
+    if (!manuscriptPath.startsWith("manuscript/")) {
+      return undefined;
+    }
+
+    return {
+      projectRoot: stegoProjectRoot,
+      manuscriptPath
+    };
+  }
+
+  private async runStegoAddComment(
+    context: StegoIntegrationContext,
+    payload: Record<string, unknown>
+  ): Promise<StegoAddCommentResponse> {
+    const args = [
+      "comments",
+      "add",
+      context.manuscriptPath,
+      "--input",
+      "-",
+      "--format",
+      "json"
+    ];
+
+    return new Promise<StegoAddCommentResponse>((resolve, reject) => {
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+
+      const child = spawn(STEGO_CLI_COMMAND, args, {
+        cwd: context.projectRoot,
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+
+      const finish = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        callback();
+      };
+
+      const timeout = setTimeout(() => {
+        child.kill();
+        finish(() => {
+          reject(new Error(`Stego CLI timed out after ${Math.round(STEGO_COMMAND_TIMEOUT_MS / 1000)} seconds.`));
+        });
+      }, STEGO_COMMAND_TIMEOUT_MS);
+
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+
+      child.stdout.on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+
+      child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+
+      child.on("error", (error) => {
+        clearTimeout(timeout);
+        finish(() => {
+          reject(new Error(`Could not start Stego CLI ('${STEGO_CLI_COMMAND}'): ${error.message}`));
+        });
+      });
+
+      child.on("close", (code) => {
+        clearTimeout(timeout);
+        finish(() => {
+          if (code !== 0) {
+            const details = stderr.trim() || stdout.trim() || `exit code ${code ?? "unknown"}`;
+            reject(new Error(details));
+            return;
+          }
+
+          const trimmed = stdout.trim();
+          if (!trimmed) {
+            resolve({});
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(trimmed) as StegoAddCommentResponse;
+            resolve(parsed);
+          } catch {
+            reject(new Error("Stego CLI returned non-JSON output for --format json."));
+          }
+        });
+      });
+
+      child.stdin.write(JSON.stringify(payload));
+      child.stdin.end();
+    });
+  }
+
   private refreshDocumentDecorations(document: vscode.TextDocument): void {
     for (const editor of vscode.window.visibleTextEditors) {
       if (editor.document.uri.toString() === document.uri.toString()) {
@@ -492,10 +814,11 @@ export class ProblemFinderService implements vscode.Disposable {
     const mediumOptions: vscode.DecorationOptions[] = [];
     const lowOptions: vscode.DecorationOptions[] = [];
     const groupedEntries = buildOverlapGroups(activeEntries);
+    const allowStegoConvert = this.resolveStegoIntegrationContext(document) !== undefined;
     const rangeState = new Map<string, { severity: ProblemIssue["severity"]; option: vscode.DecorationOptions }>();
 
     for (const group of groupedEntries) {
-      const hoverMarkdown = this.buildHoverMarkdown(uri, group);
+      const hoverMarkdown = this.buildHoverMarkdown(uri, group, allowStegoConvert);
       for (const entry of group) {
         const key = `${entry.range.start.line}:${entry.range.start.character}-${entry.range.end.line}:${entry.range.end.character}`;
         const option: vscode.DecorationOptions = {
@@ -527,10 +850,14 @@ export class ProblemFinderService implements vscode.Disposable {
     editor.setDecorations(this.lowSeverityDecoration, lowOptions);
   }
 
-  private buildHoverMarkdown(uriString: string, entries: HoverProblemEntry[]): vscode.MarkdownString {
+  private buildHoverMarkdown(
+    uriString: string,
+    entries: HoverProblemEntry[],
+    allowStegoConvert: boolean
+  ): vscode.MarkdownString {
     const markdown = new vscode.MarkdownString();
     markdown.isTrusted = {
-      enabledCommands: [IGNORE_PROBLEM_COMMAND]
+      enabledCommands: [IGNORE_PROBLEM_COMMAND, FIX_PROBLEM_COMMAND, CONVERT_PROBLEM_TO_STEGO_COMMENT_COMMAND]
     };
 
     if (entries.length > 1) {
@@ -554,6 +881,8 @@ export class ProblemFinderService implements vscode.Disposable {
       const confidence = `${Math.round(entry.issue.confidence * 100)}%`;
       const ignoreArgs = encodeURIComponent(JSON.stringify([uriString, entry.id]));
       const ignoreUri = vscode.Uri.parse(`command:${IGNORE_PROBLEM_COMMAND}?${ignoreArgs}`);
+      const fixedUri = vscode.Uri.parse(`command:${FIX_PROBLEM_COMMAND}?${ignoreArgs}`);
+      const convertUri = vscode.Uri.parse(`command:${CONVERT_PROBLEM_TO_STEGO_COMMENT_COMMAND}?${ignoreArgs}`);
 
       markdown.appendMarkdown(`\n\n**${escapeMarkdown(entry.issue.question)}**  \n`);
       markdown.appendMarkdown(
@@ -561,7 +890,14 @@ export class ProblemFinderService implements vscode.Disposable {
       );
       markdown.appendMarkdown(`Why it matters: ${escapeMarkdown(entry.issue.rationale)}  \n`);
       markdown.appendMarkdown(`Fix hint: ${escapeMarkdown(entry.issue.fixHint)}  \n`);
-      markdown.appendMarkdown(`[Dismiss](${ignoreUri.toString()})`);
+
+      const actionLinks: string[] = [];
+      if (allowStegoConvert) {
+        actionLinks.push(`[Convert to Stego comment](${convertUri.toString()})`);
+      }
+      actionLinks.push(`[Fixed](${fixedUri.toString()})`);
+      actionLinks.push(`[Dismiss](${ignoreUri.toString()})`);
+      markdown.appendMarkdown(actionLinks.join(" · "));
 
       if (index < sortedEntries.length - 1) {
         markdown.appendMarkdown("\n\n---");
@@ -745,4 +1081,46 @@ function buildOverlapGroups<T extends { range: vscode.Range }>(entries: T[]): T[
   }
 
   return groups;
+}
+
+function toDismissedProblemEntry(issue: ProblemIssue): DismissedProblemEntry {
+  const normalizedQuestion = normalizeIssueText(issue.question);
+  const normalizedFlaggedText = normalizeIssueText(issue.flaggedText);
+  const compactFlaggedText = issue.flaggedText.replace(/\s+/g, " ").trim();
+  const compactQuestion = issue.question.replace(/\s+/g, " ").trim();
+
+  return {
+    key: `${issue.category}|${normalizedFlaggedText}|${normalizedQuestion}`,
+    category: issue.category,
+    normalizedQuestion,
+    normalizedFlaggedText,
+    summary: `${compactQuestion} | text: "${truncate(compactFlaggedText, 120)}"`
+  };
+}
+
+function isDismissedIssueMatch(issue: ProblemIssue, dismissedEntries: readonly DismissedProblemEntry[]): boolean {
+  const normalizedQuestion = normalizeIssueText(issue.question);
+  const normalizedFlaggedText = normalizeIssueText(issue.flaggedText);
+  const key = `${issue.category}|${normalizedFlaggedText}|${normalizedQuestion}`;
+
+  return dismissedEntries.some((entry) => (
+    entry.key === key
+    || (entry.category === issue.category && entry.normalizedFlaggedText.length > 0 && entry.normalizedFlaggedText === normalizedFlaggedText)
+  ));
+}
+
+function normalizeIssueText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[`"'“”‘’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
