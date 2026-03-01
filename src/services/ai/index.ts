@@ -46,12 +46,16 @@ export {
   buildAiEnvOverrides,
   buildAiExecArgs,
   buildAiLoginStatusArgs,
+  generateProblemsWithAi,
+  generateRawAiResponse,
   generateSuggestionsWithAi
 } from "./cliAiClient";
 export type { AiExecOptions, AiRequestOptions } from "./cliAiClient";
 
 export {
   canUseCopilotChatInBackground,
+  generateProblemsWithCopilotChat,
+  generateRawCopilotChatResponse,
   generateSuggestionsWithCopilotChat
 } from "./copilotChatClient";
 export type { CopilotChatRequestOptions } from "./copilotChatClient";

@@ -20,6 +20,7 @@
     "onCommand:saurus.generateSuggestions",
     "onCommand:saurus.suggestForSelection",
     "onCommand:saurus.suggestForSelectionWithPrompt",
+    "onCommand:saurus.findProblems",
     "onCommand:saurus.configureThesaurusProvider",
     "onCommand:saurus.configureAiProvider",
     "onCommand:saurus.configureAiModel",
@@ -47,6 +48,10 @@
       {
         "command": "saurus.suggestForSelectionWithPrompt",
         "title": "Saurus: Suggest For Selected Text (With Prompt)"
+      },
+      {
+        "command": "saurus.findProblems",
+        "title": "Saurus: Diagnose Writing Problems"
       },
       {
         "command": "saurus.configureThesaurusProvider",
@@ -120,8 +125,8 @@
         },
         "saurus.thesaurus.enabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Enable dictionary thesaurus suggestions."
+          "default": false,
+          "description": "Enable optional dictionary thesaurus suggestions."
         },
         "saurus.thesaurus.provider": {
           "type": "string",
@@ -189,7 +194,7 @@
         },
         "saurus.ai.timeoutMs": {
           "type": "number",
-          "default": 20000,
+          "default": 60000,
           "minimum": 1000,
           "description": "Timeout for AI requests in milliseconds."
         },
@@ -285,6 +290,19 @@
           "default": 140,
           "minimum": 0,
           "description": "Characters of context after placeholder to include in prompt."
+        },
+        "saurus.problemFinder.prompt.template": {
+          "type": "string",
+          "scope": "window",
+          "default": "You are a writing revision assistant. Analyze the target text and identify up to ${issueCount} meaningful line-edit or revision problems.\n\nReturn valid JSON only with this shape:\n{\"issues\":[{\"question\":\"...\",\"category\":\"clarity|flow|structure|tone|grammar|punctuation|repetition|logic|consistency|voice|style|other\",\"severity\":\"low|medium|high\",\"confidence\":0.0,\"rationale\":\"...\",\"flaggedText\":\"...\",\"startOffset\":0,\"endOffset\":0,\"fixHint\":\"...\"}]}\n\nRules:\n- Do not report spelling or typo issues.\n- Phrase every issue as a constructive question.\n- flaggedText must be an exact snippet from target text.\n- startOffset/endOffset must be 0-based offsets relative to target text.\n- endOffset must be greater than startOffset.\n- Keep fixHint concise and actionable.\n- Rank issues by impact (most important first).\n- If there are no meaningful issues, return {\"issues\":[]}.\n\nScope: ${scope}\nFile name: ${fileName}\nLanguage id: ${languageId}\n\nTarget text:\n${targetText}\n\nContext left:\n${contextLeft}\n\nContext right:\n${contextRight}\n",
+          "description": "Prompt template used for AI problem finding. Supports ${targetText}, ${contextLeft}/${contextBefore}, ${contextRight}/${contextAfter}, ${issueCount}, ${fileName}, ${languageId}, ${scope}."
+        },
+        "saurus.problemFinder.maxIssues": {
+          "type": "number",
+          "default": 12,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of writing problems to request from AI per run."
         }
       }
     },
@@ -302,6 +320,13 @@
         "linux": "ctrl+shift+x",
         "win": "ctrl+shift+x",
         "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
+      },
+      {
+        "command": "saurus.findProblems",
+        "mac": "cmd+shift+d",
+        "linux": "ctrl+shift+d",
+        "win": "ctrl+shift+d",
+        "when": "editorTextFocus && !suggestWidgetVisible"
       },
       {
         "command": "saurus.showAiOnlySuggestions",

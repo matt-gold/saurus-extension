@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { AiReasoningEffort, SuggestionResponse } from "../../../types";
+import type { AiReasoningEffort, ProblemFinderResponse, SuggestionResponse } from "../../../types";
 import type { CliAiProviderImplementation } from "../internal/cliProviders/types";
 import { CliModelDiscoveryCommand } from "../modelDiscoveryShared";
 
@@ -48,6 +48,7 @@ export type AiSuggestionProvider<K extends string = string> = {
   readonly kind: K;
   canGenerateInBackground: (options: AiProviderBackgroundCheckOptions) => Promise<boolean>;
   generate: (request: AiProviderGenerateRequest) => Promise<SuggestionResponse>;
+  generateProblems: (request: AiProviderGenerateRequest) => Promise<ProblemFinderResponse>;
 };
 
 /** Unified definition for one AI provider (metadata + model discovery + runtime behavior). */

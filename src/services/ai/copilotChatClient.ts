@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { parseProblemFinderResponse } from "./aiProblemResponseParser";
 import { parseSuggestionResponse } from "./aiResponseParser";
 import {
   CopilotChatRequestError,
@@ -6,7 +7,7 @@ import {
   mapCopilotChatError,
   selectFirstCopilotModel
 } from "./copilotChatCore";
-import { SuggestionResponse } from "../../types";
+import { ProblemFinderResponse, SuggestionResponse } from "../../types";
 
 /** Options for copilot chat request. */
 export type CopilotChatRequestOptions = {
@@ -41,6 +42,22 @@ export async function canUseCopilotChatInBackground(
 export async function generateSuggestionsWithCopilotChat(
   options: CopilotChatRequestOptions
 ): Promise<SuggestionResponse> {
+  const raw = await generateRawCopilotChatResponse(options);
+  return parseSuggestionResponse(raw, "Copilot Chat", (message) => new CopilotChatRequestError(message));
+}
+
+/** Implements generate writing problems with copilot chat. */
+export async function generateProblemsWithCopilotChat(
+  options: CopilotChatRequestOptions
+): Promise<ProblemFinderResponse> {
+  const raw = await generateRawCopilotChatResponse(options);
+  return parseProblemFinderResponse(raw, "Copilot Chat", (message) => new CopilotChatRequestError(message));
+}
+
+/** Runs one Copilot Chat request and returns raw text. */
+export async function generateRawCopilotChatResponse(
+  options: CopilotChatRequestOptions
+): Promise<string> {
   const model = await selectCopilotChatModel(options.model);
   if (!model) {
     throw new CopilotChatUnavailableError();
@@ -71,7 +88,7 @@ export async function generateSuggestionsWithCopilotChat(
       throw new CopilotChatRequestError(`Copilot Chat request timed out after ${options.timeoutMs}ms.`);
     }
 
-    return parseSuggestionResponse(raw, "Copilot Chat", (message) => new CopilotChatRequestError(message));
+    return raw;
   } catch (error) {
     if (timedOut) {
       throw new CopilotChatRequestError(`Copilot Chat request timed out after ${options.timeoutMs}ms.`);

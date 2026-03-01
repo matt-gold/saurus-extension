@@ -20,6 +20,20 @@ export function createCliAiRuntime<K extends string>(kind: K): AiSuggestionProvi
         schemaPath: request.schemaPath,
         prompt: request.prompt
       });
+    },
+    async generateProblems(request: AiProviderGenerateRequest) {
+      const { generateProblemsWithAi } = require("../../cliAiClient") as typeof import("../../cliAiClient");
+      type CliProviderKind = Parameters<typeof generateProblemsWithAi>[0]["aiProvider"];
+      return generateProblemsWithAi({
+        aiProvider: kind as CliProviderKind,
+        aiPath: request.aiPath,
+        model: request.model,
+        reasoningEffort: request.reasoningEffort,
+        timeoutMs: request.timeoutMs,
+        workspaceDir: request.workspaceDir,
+        schemaPath: request.schemaPath,
+        prompt: request.prompt
+      });
     }
   };
 }

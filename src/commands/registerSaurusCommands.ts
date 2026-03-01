@@ -212,6 +212,23 @@ export function registerSaurusCommands(
   );
 
   subscriptions.push(
+    vscode.commands.registerCommand("saurus.findProblems", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        return;
+      }
+
+      await controller.findProblems(editor);
+    })
+  );
+
+  subscriptions.push(
+    vscode.commands.registerCommand("saurus.ignoreProblem", async (uriString?: string, problemId?: string) => {
+      controller.ignoreProblem(uriString, problemId);
+    })
+  );
+
+  subscriptions.push(
     vscode.commands.registerCommand("saurus.refreshSuggestions", async (uri?: string, line?: number, character?: number) => {
       await runRefreshWithOptionalDirection(undefined, uri, line, character);
     })

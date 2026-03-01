@@ -2,10 +2,17 @@ import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { parseProblemFinderResponse } from "./aiProblemResponseParser";
 import { getAiProviderLabel as getAiProviderDisplayLabel } from "./aiProviderCatalog";
 import { parseSuggestionResponse } from "./aiResponseParser";
 import { getCliAiProviderDefinition } from "./providers";
-import { AiProviderKind, AiReasoningEffort, CliAiProviderKind, SuggestionResponse } from "../../types";
+import {
+  AiProviderKind,
+  AiReasoningEffort,
+  CliAiProviderKind,
+  ProblemFinderResponse,
+  SuggestionResponse
+} from "../../types";
 import type { CliAiProviderImplementation } from "./internal/cliProviders/types";
 
 /** Options for launching a CLI-backed AI provider. */
@@ -229,6 +236,18 @@ async function ensureAiLoggedIn(options: AiExecOptions): Promise<void> {
 
 /** Runs a suggestion request through a CLI-backed AI provider. */
 export async function generateSuggestionsWithAi(options: AiRequestOptions): Promise<SuggestionResponse> {
+  const raw = await generateRawAiResponse(options);
+  return parseSuggestionResponse(raw, normalizeProviderLabel(options.aiProvider), (message) => new AiRequestError(message));
+}
+
+/** Runs a problem-finder request through a CLI-backed AI provider. */
+export async function generateProblemsWithAi(options: AiRequestOptions): Promise<ProblemFinderResponse> {
+  const raw = await generateRawAiResponse(options);
+  return parseProblemFinderResponse(raw, normalizeProviderLabel(options.aiProvider), (message) => new AiRequestError(message));
+}
+
+/** Runs a CLI-backed AI request and returns raw provider output. */
+export async function generateRawAiResponse(options: AiRequestOptions): Promise<string> {
   await ensureAiLoggedIn(options);
 
   const providerImplementation = getCliProviderImplementation(options.aiProvider);
@@ -263,11 +282,9 @@ export async function generateSuggestionsWithAi(options: AiRequestOptions): Prom
         );
     }
 
-    const raw = execPlan.responseSource === "outputFile"
+    return execPlan.responseSource === "outputFile"
       ? await fs.readFile(outputFile, "utf8")
       : result.stdout;
-
-    return parseSuggestionResponse(raw, normalizeProviderLabel(options.aiProvider), (message) => new AiRequestError(message));
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

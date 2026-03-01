@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { SaurusController } from "./app";
+import { ProblemFinderService } from "./app/saurus/internal/ProblemFinderService";
 import { PersistentCacheCoordinator } from "./app/saurus/internal/PersistentCacheCoordinator";
 import { PlaceholderEditActions } from "./app/saurus/internal/PlaceholderEditActions";
 import { SuggestionGenerationService } from "./app/saurus/internal/SuggestionGenerationService";
@@ -16,12 +17,15 @@ const PERSISTED_CACHE_FILENAME = "saurus-cache-v1.json";
 /** Activates the Saurus extension and wires VS Code integrations. */
 export function activate(context: vscode.ExtensionContext): void {
   const schemaPath = context.asAbsolutePath(path.join("resources", "suggestions.schema.json"));
+  const problemFinderSchemaPath = context.asAbsolutePath(path.join("resources", "problem-finder.schema.json"));
   const persistentCachePath = path.join(context.globalStorageUri.fsPath, PERSISTED_CACHE_FILENAME);
   const controller = new SaurusController({
     extensionContext: context,
     schemaPath,
+    problemFinderSchemaPath,
     persistentCachePath,
     factories: {
+      createProblemFinderService: (deps) => new ProblemFinderService(deps),
       createPersistentCacheCoordinator: (deps) => new PersistentCacheCoordinator(deps),
       createPlaceholderEditActions: (deps) => new PlaceholderEditActions(deps),
       createSuggestionGenerationService: (deps) => new SuggestionGenerationService(deps)
@@ -85,6 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
       const documentUri = event.document.uri.toString();
+      controller.applyProblemDocumentChanges(event.document, event.contentChanges);
       controller.invalidateDocument(event.document);
       highlighter.scheduleForDocument(event.document, 40);
       lastSuggestionKeyByDocument.delete(documentUri);
@@ -95,6 +100,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument((document) => {
       const documentUri = document.uri.toString();
+      controller.clearProblemsForDocument(document);
       highlighter.clearForDocument(document);
       lastSuggestionKeyByDocument.delete(documentUri);
       clearTimer(documentUri);
@@ -106,12 +112,14 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!editor) {
         return;
       }
+      controller.refreshProblemDecorationsForEditor(editor);
       highlighter.schedule(editor);
     })
   );
 
   context.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(() => {
+      controller.refreshProblemDecorationsForVisibleEditors();
       highlighter.refreshVisibleEditors();
     })
   );
@@ -122,6 +130,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      controller.refreshProblemDecorationsForVisibleEditors();
       highlighter.refreshVisibleEditors();
     })
   );

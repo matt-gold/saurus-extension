@@ -37,8 +37,10 @@ export type SaurusSettings = {
     languages: string[];
     delimiters: DelimiterPair;
     promptTemplate: string;
+    problemFinderPromptTemplate: string;
     activationModeOnEnter: ActivationMode;
     suggestionCount: number;
+    problemFinderMaxIssues: number;
     autoTriggerOnCursorEnter: boolean;
     autoTriggerDebounceMs: number;
     contextCharsBefore: number;
@@ -124,6 +126,42 @@ export type SuggestionRequest = {
 /** Describes suggestion response. */
 export type SuggestionResponse = {
     suggestions: string[];
+};
+
+/** Describes problem severity returned by the AI problem finder. */
+export type ProblemSeverity = "low" | "medium" | "high";
+
+/** Describes problem category returned by the AI problem finder. */
+export type ProblemCategory =
+    | "clarity"
+    | "flow"
+    | "structure"
+    | "tone"
+    | "grammar"
+    | "punctuation"
+    | "repetition"
+    | "logic"
+    | "consistency"
+    | "voice"
+    | "style"
+    | "other";
+
+/** Describes one AI-detected writing problem. */
+export type ProblemIssue = {
+    question: string;
+    category: ProblemCategory;
+    severity: ProblemSeverity;
+    confidence: number;
+    rationale: string;
+    flaggedText: string;
+    startOffset: number;
+    endOffset: number;
+    fixHint: string;
+};
+
+/** Describes AI problem-finder response payload. */
+export type ProblemFinderResponse = {
+    issues: ProblemIssue[];
 };
 
 /** Represents the result of build context. */

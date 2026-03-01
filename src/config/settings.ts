@@ -25,6 +25,36 @@ Additional direction (optional):
 ${"${direction}"}
 `;
 
+/** Default value for problem-finder prompt template. */
+export const DEFAULT_PROBLEM_FINDER_PROMPT_TEMPLATE = `You are a writing revision assistant. Analyze the target text and identify up to ${"${issueCount}"} meaningful line-edit or revision problems.
+
+Return valid JSON only with this shape:
+{"issues":[{"question":"...","category":"clarity|flow|structure|tone|grammar|punctuation|repetition|logic|consistency|voice|style|other","severity":"low|medium|high","confidence":0.0,"rationale":"...","flaggedText":"...","startOffset":0,"endOffset":0,"fixHint":"..."}]}
+
+Rules:
+- Do not report spelling or typo issues.
+- Phrase every issue as a constructive question.
+- flaggedText must be an exact snippet from target text.
+- startOffset/endOffset must be 0-based offsets relative to target text.
+- endOffset must be greater than startOffset.
+- Keep fixHint concise and actionable.
+- Rank issues by impact (most important first).
+- If there are no meaningful issues, return {"issues":[]}.
+
+Scope: ${"${scope}"}
+File name: ${"${fileName}"}
+Language id: ${"${languageId}"}
+
+Target text:
+${"${targetText}"}
+
+Context left:
+${"${contextLeft}"}
+
+Context right:
+${"${contextRight}"}
+`;
+
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -64,7 +94,8 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
 
   const languages = cfg.get<string[]>("languages", ["markdown", "plaintext"]);
   const suggestionCount = clampNumber(cfg.get<number>("suggestions.count", 10), 2, 20);
-  const aiTimeoutMs = Math.max(1000, cfg.get<number>("ai.timeoutMs", 20000));
+  const problemFinderMaxIssues = clampNumber(cfg.get<number>("problemFinder.maxIssues", 12), 1, 20);
+  const aiTimeoutMs = Math.max(1000, cfg.get<number>("ai.timeoutMs", 60000));
   const autoTriggerDebounceMs = Math.max(50, cfg.get<number>("autoTrigger.debounceMs", 250));
   const thesaurusTimeoutMs = Math.max(500, cfg.get<number>("thesaurus.timeoutMs", 10000));
   const thesaurusMaxSuggestions = clampNumber(cfg.get<number>("thesaurus.maxSuggestions", 20), 1, 50);
@@ -86,8 +117,13 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
       close: sanitizeDelimiter(cfg.get<string>("delimiters.close", "}}"), "}}")
     },
     promptTemplate: cfg.get<string>("prompt.template", DEFAULT_PROMPT_TEMPLATE),
+    problemFinderPromptTemplate: cfg.get<string>(
+      "problemFinder.prompt.template",
+      DEFAULT_PROBLEM_FINDER_PROMPT_TEMPLATE
+    ),
     activationModeOnEnter: sanitizeActivationMode(activationModeRaw),
     suggestionCount,
+    problemFinderMaxIssues,
     autoTriggerOnCursorEnter: cfg.get<boolean>("autoTrigger.onCursorEnter", true),
     autoTriggerDebounceMs,
     contextCharsBefore: Math.max(0, cfg.get<number>("context.charsBefore", 220)),
@@ -102,7 +138,7 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
     aiAutoRun: aiAutoGenerateOnOpen,
     thesaurusPrefix: cfg.get<string>("menu.thesaurusPrefix", DEFAULT_THESAURUS_PREFIX),
     aiPrefix: cfg.get<string>("menu.aiPrefix", DEFAULT_AI_PREFIX),
-    thesaurusEnabled: cfg.get<boolean>("thesaurus.enabled", true),
+    thesaurusEnabled: cfg.get<boolean>("thesaurus.enabled", false),
     thesaurusProvider: sanitizeThesaurusProvider(thesaurusProviderRaw),
     thesaurusApiKey: cfg.get<string>("thesaurus.apiKey", "").trim(),
     thesaurusTimeoutMs,

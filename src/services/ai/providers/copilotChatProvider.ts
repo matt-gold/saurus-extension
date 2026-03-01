@@ -32,6 +32,17 @@ export const COPILOT_CHAT_PROVIDER_DEFINITION = {
           ? "Saurus needs Copilot Chat to generate replacement suggestions for your placeholder."
           : undefined
       });
+    },
+    generateProblems(request) {
+      const { generateProblemsWithCopilotChat } = require("../copilotChatClient") as typeof import("../copilotChatClient");
+      return generateProblemsWithCopilotChat({
+        model: request.model,
+        timeoutMs: request.timeoutMs,
+        prompt: request.prompt,
+        justification: request.userInitiated
+          ? "Saurus needs Copilot Chat to diagnose writing problems in your document."
+          : undefined
+      });
     }
   },
   async discoverModels() {

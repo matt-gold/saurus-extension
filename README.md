@@ -4,7 +4,7 @@
   <img src="assets/icon.png" alt="Saurus logo" width="128" />
 </div>
 
-`Saurus` is an AI-second writing tool designed to keep you in the flow when writing with VSCode.
+`Saurus` is a responsible AI writing companion for VS Code. It is built to preserve your voice, keep you in flow, and support targeted edits instead of taking over the writing process.
 
 <div align="center">
   <video
@@ -24,7 +24,7 @@
 </p>
 
 
-It highlights placeholders (`{{...}}`) in your text and provides replacement options on click. By default it prioritizes thesaurus results first, and is designed to avoid AI-slop by targeting single words or short phrases.
+It highlights placeholders (`{{...}}`) in your text and provides replacement options on click. Thesaurus-first mode is available when enabled, and Saurus is designed to avoid AI-slop by targeting single words or short phrases.
 
 ## Key Workflows
 
@@ -33,18 +33,28 @@ These are the primary workflows:
 - As you write, leave placeholders and come back later, for example: `I came, I saw, I {{took over}}`. Placeholders are highlighted, and placing the cursor inside one opens the Saurus suggestions window.
 - `cmd+shift+s` / `ctrl+shift+s`: wrap selected text in delimiters and open suggestions
 - `cmd+shift+a` / `ctrl+shift+a`: AI-only suggestions for the current placeholder (also wraps selection if needed)
+- `cmd+shift+d` / `ctrl+shift+d`: diagnose writing problems in a selection or (with confirmation) the full file
 - `cmd+shift+z` / `ctrl+shift+z`: thesaurus-only suggestions for the current placeholder (also wraps selection if needed)
 - `Esc` (with suggest menu open): close suggestions and remove placeholder delimiters
 
 ## Features
 
-- Thesaurus-first suggestions (Merriam-Webster) with AI as optional augmentation
-- Works best for single words and short phrases to preserve voice and avoid paragraph-level slop
-- Keyboard-first workflow for quick replacement without leaving the editor
-- Multiple AI provider support (`copilotChat`, `copilot`, `codex`, `claude`)
-- Configurable delimiters, language activation, and prompt template behavior
-- Smart caching for faster repeat lookups, with optional persistence across reloads
-- Visual placeholder highlighting so unfinished spots are easy to find
+- Voice-preserving edits: optimize words and short phrases without turning your draft into AI-written prose.
+- Revision-grade diagnosis: scan a selection or file and surface likely issues as constructive questions, not blunt verdicts.
+- Inline problem marking: underlines and hover details show severity, rationale, and concise fix hints exactly where problems appear.
+- Responsible AI controls: selection-first flow, explicit consent before full-file analysis, and no large-scale rewrite output in Diagnose.
+- Keyboard-native workflow: fast commands for suggest, diagnose, and iterate without leaving the editor.
+- Thesaurus mode backed by Merriam-Webster takes priority over AI suggestions when enabled (API key required, recommended).
+- Flexible AI providers: `copilotChat` (native), `codex`, `copilot` (GitHub CLI), and `claude`.
+
+## Diagnose Writing Problems
+
+Use `Saurus: Diagnose Writing Problems` (`cmd+shift+d` / `ctrl+shift+d`) when you want feedback on quality risks instead of replacement suggestions.
+
+- Analyzes either selected text (with nearby context) or the full file after explicit confirmation.
+- Surfaces potential revision issues directly in the editor with underlines, hover explanations, severity, and concise fix hints.
+- Frames findings as constructive questions to support editing decisions without forcing rewrites.
+- Focuses on revision-level concerns (clarity, flow, tone, structure, grammar, punctuation, repetition, logic) and excludes spelling-only checks.
 
 ## Supported Files
 
@@ -61,7 +71,7 @@ These are the primary workflows:
 
 ### Thesaurus (Merriam-Webster)
 
-Required settings:
+Optional feature (disabled by default, recommended for deterministic single-word alternatives). Enable it with:
 
 ```json
 {
@@ -178,6 +188,7 @@ This produces a `.vsix` you can install locally.
 - `Saurus: Suggest For Selected Text` (`saurus.suggestForSelection`)
 - `Saurus: Get More AI Options` (`saurus.refreshSuggestions`)
 - `Saurus: Generate With Prompt` (`saurus.refreshSuggestionsWithPrompt`)
+- `Saurus: Diagnose Writing Problems` (`saurus.findProblems`)
 - `Saurus: Show AI Suggestions Only` (`saurus.showAiOnlySuggestions`)
 - `Saurus: Show Thesaurus Suggestions Only` (`saurus.showThesaurusOnlySuggestions`)
 - `Saurus: Exit Placeholder Suggestions` (`saurus.exitPlaceholderSuggestions`)
@@ -219,6 +230,8 @@ All settings are under `saurus.*`.
 - `saurus.autoTrigger.debounceMs`
 - `saurus.context.charsBefore`
 - `saurus.context.charsAfter`
+- `saurus.problemFinder.prompt.template`
+- `saurus.problemFinder.maxIssues`
 
 Example workspace settings:
 
@@ -226,11 +239,7 @@ Example workspace settings:
 {
   "saurus.delimiters.open": "[[",
   "saurus.delimiters.close": "]]",
-  "saurus.thesaurus.enabled": true,
-  "saurus.thesaurus.provider": "merriamWebster",
-  "saurus.thesaurus.apiKey": "YOUR_MW_API_KEY",
-  "saurus.thesaurus.timeoutMs": 10000,
-  "saurus.thesaurus.maxSuggestions": 20,
+  "saurus.thesaurus.enabled": false,
   "saurus.ai.autoGenerateOnOpen": false,
   "saurus.ai.provider": "copilotChat",
   "saurus.ai.model": "",
