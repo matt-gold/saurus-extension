@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { ProblemFinderService } from "./internal/ProblemFinderService";
 import { PersistentCacheCoordinator } from "./internal/PersistentCacheCoordinator";
 import { PlaceholderEditActions } from "./internal/PlaceholderEditActions";
 import {
@@ -47,6 +48,9 @@ export type CompletionLookup = {
 };
 
 type SaurusControllerFactories = {
+  createProblemFinderService: (
+    deps: ConstructorParameters<typeof ProblemFinderService>[0]
+  ) => ProblemFinderService;
   createPersistentCacheCoordinator: (
     deps: ConstructorParameters<typeof PersistentCacheCoordinator>[0]
   ) => PersistentCacheCoordinator;
@@ -61,6 +65,7 @@ type SaurusControllerFactories = {
 type SaurusControllerConstructionOptions = {
   extensionContext: vscode.ExtensionContext;
   schemaPath: string;
+  problemFinderSchemaPath: string;
   persistentCachePath: string;
   factories: SaurusControllerFactories;
 };
@@ -74,6 +79,7 @@ export class SaurusController implements vscode.Disposable {
   private readonly preferRefreshSelectionKeys = new Set<string>();
   private readonly sourceFilterByKey = new Map<string, SuggestionSourceFilter>();
   private readonly aiActionByKey = new Map<string, "refresh" | "refreshWithPrompt">();
+  private readonly problemFinderService: ProblemFinderService;
   private readonly persistentCacheCoordinator: PersistentCacheCoordinator;
   private readonly placeholderEditActions: PlaceholderEditActions;
   private readonly suggestionGenerationService: SuggestionGenerationService;
@@ -81,6 +87,10 @@ export class SaurusController implements vscode.Disposable {
   public readonly onDidChangeCompletionItems = this.completionItemsChangedEmitter.event;
 
   public constructor(options: SaurusControllerConstructionOptions) {
+    this.problemFinderService = options.factories.createProblemFinderService({
+      problemFinderSchemaPath: options.problemFinderSchemaPath,
+      getSettings: (document) => this.getSettings(document)
+    });
     this.persistentCacheCoordinator = options.factories.createPersistentCacheCoordinator({
       cache: this.cache,
       persistentCachePath: options.persistentCachePath,
@@ -119,6 +129,7 @@ export class SaurusController implements vscode.Disposable {
   }
 
   public dispose(): void {
+    this.problemFinderService.dispose();
     this.persistentCacheCoordinator.dispose();
     this.completionItemsChangedEmitter.dispose();
   }
@@ -306,6 +317,41 @@ export class SaurusController implements vscode.Disposable {
       const message = error instanceof Error ? error.message : "Unknown error";
       void vscode.window.showErrorMessage(`Saurus: failed to clear persistent cache. ${message}`);
     }
+  }
+
+  public async findProblems(editor: vscode.TextEditor): Promise<void> {
+    await this.problemFinderService.findProblems(editor);
+  }
+
+  public applyProblemDocumentChanges(
+    document: vscode.TextDocument,
+    contentChanges: readonly vscode.TextDocumentContentChangeEvent[]
+  ): void {
+    this.problemFinderService.applyDocumentChanges(document, contentChanges);
+  }
+
+  public refreshProblemDecorationsForEditor(editor: vscode.TextEditor | undefined): void {
+    this.problemFinderService.refreshEditor(editor);
+  }
+
+  public refreshProblemDecorationsForVisibleEditors(): void {
+    this.problemFinderService.refreshVisibleEditors();
+  }
+
+  public ignoreProblem(uriString?: string, problemId?: string): void {
+    this.problemFinderService.ignoreProblem(uriString, problemId);
+  }
+
+  public fixProblem(uriString?: string, problemId?: string): void {
+    this.problemFinderService.fixProblem(uriString, problemId);
+  }
+
+  public async convertProblemToStegoComment(uriString?: string, problemId?: string): Promise<void> {
+    await this.problemFinderService.convertProblemToStegoComment(uriString, problemId);
+  }
+
+  public clearProblemsForDocument(document: vscode.TextDocument): void {
+    this.problemFinderService.clearProblemsForDocument(document);
   }
 
   private notifyCompletionItemsChanged(): void {
