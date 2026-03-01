@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- d1e838a: Add the Diagnose Writing Problems workflow with in-editor issue underlines, hover actions, and configurable problem-finder prompts/settings.
+
 ## 0.4.1
 
 ### Patch Changes
