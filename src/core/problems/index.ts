@@ -17,6 +17,8 @@ export type {
   ProblemOffsetSpan,
   ResolveProblemIssueRangesInput,
   ResolveProblemIssueRangesResult,
-  ResolvedProblemIssue
+  ResolvedProblemIssue,
+  UnresolvedProblemIssue,
+  UnresolvedProblemIssueReason
 } from "./rangeResolver";
 export { resolveProblemIssueRanges } from "./rangeResolver";

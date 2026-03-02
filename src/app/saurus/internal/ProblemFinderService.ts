@@ -44,6 +44,15 @@ type DismissedProblemEntry = {
 type DiagnoseRunResult = {
   trackedIssues: TrackedProblemIssue[];
   skippedFindings: number;
+  skippedIssues: SkippedProblemFinding[];
+};
+
+type SkippedProblemFindingReason = "unresolvedAnchor" | "outOfBoundsRange";
+
+type SkippedProblemFinding = {
+  issue: ProblemIssue;
+  reason: SkippedProblemFindingReason;
+  detail: string;
 };
 
 type StegoIntegrationContext = {
@@ -69,6 +78,7 @@ const DISMISSED_ISSUE_PROMPT_LIMIT = 20;
 const DISMISSED_ISSUE_PROMPT_CHAR_LIMIT = 1800;
 const STEGO_CLI_COMMAND = "stego";
 const STEGO_COMMAND_TIMEOUT_MS = 30000;
+const VIEW_SKIPPED_FINDINGS_ACTION = "View skipped findings";
 
 const HIGH_SEVERITY_UNDERLINE_COLOR = "rgba(239, 68, 68, 0.95)";
 const MEDIUM_SEVERITY_UNDERLINE_COLOR = "rgba(245, 158, 11, 0.95)";
@@ -150,14 +160,17 @@ export class ProblemFinderService implements vscode.Disposable {
   }
 
   public ignoreProblem(uriString?: string, problemId?: string): void {
+    this.closeHoverPopover();
     this.removeProblem(uriString, problemId, true);
   }
 
   public fixProblem(uriString?: string, problemId?: string): void {
+    this.closeHoverPopover();
     this.removeProblem(uriString, problemId, false);
   }
 
   public async convertProblemToStegoComment(uriString?: string, problemId?: string): Promise<void> {
+    this.closeHoverPopover();
     if (!uriString || !problemId) {
       return;
     }
@@ -165,7 +178,6 @@ export class ProblemFinderService implements vscode.Disposable {
     const tracked = this.tracker.getTracked(uriString) ?? [];
     const target = tracked.find((entry) => entry.id === problemId && !entry.deleted);
     if (!target) {
-      this.closeHoverPopover();
       return;
     }
 
@@ -250,7 +262,6 @@ export class ProblemFinderService implements vscode.Disposable {
       }
     }
 
-    this.closeHoverPopover();
   }
 
   public async findProblems(editor: vscode.TextEditor): Promise<void> {
@@ -365,7 +376,13 @@ export class ProblemFinderService implements vscode.Disposable {
             });
             const analyzedStartDocOffset = document.offsetAt(analyzedRange.start);
             const analyzedEndDocOffset = analyzedStartDocOffset + analyzedText.length;
-            let outOfBoundsCount = 0;
+            const skippedIssues: SkippedProblemFinding[] = resolution.unresolved.map((unresolvedIssue) => ({
+              issue: unresolvedIssue.issue,
+              reason: "unresolvedAnchor",
+              detail: unresolvedIssue.reason === "overlapConflict"
+                ? "Could not anchor without overlapping another accepted finding."
+                : "Could not match this finding to exact text using offsets or snippet search."
+            }));
             const trackedIssues: TrackedProblemIssue[] = [];
 
             for (const [index, resolvedIssue] of resolution.resolved.entries()) {
@@ -376,7 +393,11 @@ export class ProblemFinderService implements vscode.Disposable {
                 endDocOffset > analyzedEndDocOffset ||
                 endDocOffset <= startDocOffset
               ) {
-                outOfBoundsCount += 1;
+                skippedIssues.push({
+                  issue: resolvedIssue.issue,
+                  reason: "outOfBoundsRange",
+                  detail: "Resolved anchor mapped outside analyzed text bounds after document-range conversion."
+                });
                 continue;
               }
 
@@ -400,7 +421,8 @@ export class ProblemFinderService implements vscode.Disposable {
 
             return {
               trackedIssues,
-              skippedFindings: resolution.unresolvedCount + outOfBoundsCount
+              skippedFindings: skippedIssues.length,
+              skippedIssues
             };
           }
         );
@@ -427,15 +449,19 @@ export class ProblemFinderService implements vscode.Disposable {
           this.refreshDocumentDecorations(document);
 
           if (result.skippedFindings > 0) {
-            void vscode.window.showInformationMessage(
-              `Saurus: ${result.skippedFindings} finding(s) could not be anchored to exact text and were skipped.`
+            const skippedChoice = await vscode.window.showInformationMessage(
+              `Saurus: ${result.skippedFindings} finding(s) could not be anchored to exact text and were skipped.`,
+              VIEW_SKIPPED_FINDINGS_ACTION
             );
+            if (skippedChoice === VIEW_SKIPPED_FINDINGS_ACTION) {
+              await this.showSkippedFindingsReport(document, scope, result.skippedIssues);
+            }
           }
 
           const severitySummary = summarizeSeverities(result.trackedIssues.map((entry) => entry.issue));
           if (severitySummary.high > 0 || severitySummary.medium > 0) {
-            void vscode.window.showWarningMessage(
-              "Saurus: Some problems were found. Hover over highlighted text to review details and fix hints."
+            void vscode.window.showInformationMessage(
+              "Saurus: Diagnosis complete. Problems were found. Hover over highlighted text to review details and fix hints."
             );
           } else if (result.trackedIssues.length === 0) {
             void vscode.window.showInformationMessage("Saurus: No problems found!");
@@ -504,13 +530,13 @@ export class ProblemFinderService implements vscode.Disposable {
         ...explicitCounts.map((count) => ({
           label: `${count}`,
           description: "Fixed",
-          detail: `Always ask for ${count} issue${count === 1 ? "" : "s"}.`,
+          detail: `Request ${count} issue${count === 1 ? "" : "s"} for this diagnosis only.`,
           value: String(count)
         }))
       ],
       {
         title: "Saurus: Number of issues to request",
-        placeHolder: "Choose Auto or a fixed issue count for this diagnose run.",
+        placeHolder: "Choose Auto or a one-time issue count override for this diagnosis.",
         ignoreFocusOut: true
       }
     );
@@ -744,6 +770,54 @@ export class ProblemFinderService implements vscode.Disposable {
     });
   }
 
+  private async showSkippedFindingsReport(
+    document: vscode.TextDocument,
+    scope: "selection" | "file",
+    skippedIssues: readonly SkippedProblemFinding[]
+  ): Promise<void> {
+    const timestamp = new Date().toISOString();
+    const contentLines: string[] = [
+      "# Saurus skipped diagnosis findings",
+      "",
+      `- File: \`${escapeMarkdown(path.basename(document.fileName))}\``,
+      `- Language: \`${escapeMarkdown(document.languageId)}\``,
+      `- Scope: \`${scope}\``,
+      `- Generated: \`${timestamp}\``,
+      `- Skipped findings: **${skippedIssues.length}**`,
+      ""
+    ];
+
+    if (skippedIssues.length === 0) {
+      contentLines.push("No skipped findings were recorded.");
+    } else {
+      skippedIssues.forEach((entry, index) => {
+        contentLines.push(`## ${index + 1}. ${escapeMarkdown(entry.issue.question)}`);
+        contentLines.push("");
+        contentLines.push(`- Reason: **${toSkippedReasonLabel(entry.reason)}**`);
+        contentLines.push(`- Detail: ${escapeMarkdown(entry.detail)}`);
+        contentLines.push(`- Severity: \`${toSeverityLabel(entry.issue.severity)}\``);
+        contentLines.push(`- Category: \`${escapeMarkdown(entry.issue.category)}\``);
+        contentLines.push(`- Confidence: \`${Math.round(entry.issue.confidence * 100)}%\``);
+        contentLines.push(`- Rationale: ${escapeMarkdown(entry.issue.rationale)}`);
+        contentLines.push(`- Fix hint: ${escapeMarkdown(entry.issue.fixHint)}`);
+        contentLines.push("- Flagged text:");
+        contentLines.push("```text");
+        contentLines.push(entry.issue.flaggedText.replace(/```/g, "``\\`"));
+        contentLines.push("```");
+        contentLines.push("");
+      });
+    }
+
+    const reportDocument = await vscode.workspace.openTextDocument({
+      language: "markdown",
+      content: contentLines.join("\n")
+    });
+    await vscode.window.showTextDocument(reportDocument, {
+      preview: false,
+      preserveFocus: false
+    });
+  }
+
   private refreshDocumentDecorations(document: vscode.TextDocument): void {
     for (const editor of vscode.window.visibleTextEditors) {
       if (editor.document.uri.toString() === document.uri.toString()) {
@@ -960,6 +1034,14 @@ function toSeverityLabel(severity: ProblemIssue["severity"]): string {
     return "Medium";
   }
   return "Low";
+}
+
+function toSkippedReasonLabel(reason: SkippedProblemFindingReason): string {
+  if (reason === "outOfBoundsRange") {
+    return "Out of bounds after mapping";
+  }
+
+  return "Could not anchor to exact text";
 }
 
 function severityRank(severity: ProblemIssue["severity"]): number {

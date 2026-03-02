@@ -4,7 +4,7 @@
   <img src="assets/icon.png" alt="Saurus logo" width="128" />
 </div>
 
-`Saurus` is a responsible AI writing companion for VS Code. It is built to preserve your voice, keep you in flow, and support targeted edits instead of taking over the writing process.
+`Saurus` is a responsible AI writing tool for VS Code. It is built to preserve your voice, keep you in flow, and support targeted edits instead of taking over the writing process.
 
 <div align="center">
   <video
