@@ -672,8 +672,7 @@ export class ProblemFinderService implements vscode.Disposable {
       "--format",
       "json"
     ];
-
-    return new Promise<StegoAddCommentResponse>((resolve, reject) => {
+    return await new Promise<StegoAddCommentResponse>((resolve, reject) => {
       let stdout = "";
       let stderr = "";
       let settled = false;
