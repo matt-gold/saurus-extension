@@ -87,4 +87,6 @@ test("drops unresolved issues when no anchor can be found", () => {
   const result = resolveProblemIssueRanges({ analyzedText, issues });
   assert.equal(result.resolved.length, 0);
   assert.equal(result.unresolvedCount, 1);
+  assert.equal(result.unresolved.length, 1);
+  assert.equal(result.unresolved[0].reason, "noAnchorMatch");
 });

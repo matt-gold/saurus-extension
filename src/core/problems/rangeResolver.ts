@@ -13,6 +13,15 @@ export type ResolvedProblemIssue = {
   anchorSource: "offset" | "textSearch";
 };
 
+/** Why one AI issue could not be safely anchored to editor text. */
+export type UnresolvedProblemIssueReason = "noAnchorMatch" | "overlapConflict";
+
+/** One AI problem that was omitted because no safe anchor could be found. */
+export type UnresolvedProblemIssue = {
+  issue: ProblemIssue;
+  reason: UnresolvedProblemIssueReason;
+};
+
 /** Inputs for mapping AI problem offsets/snippets back to analyzed text spans. */
 export type ResolveProblemIssueRangesInput = {
   analyzedText: string;
@@ -22,6 +31,7 @@ export type ResolveProblemIssueRangesInput = {
 /** Outputs of problem range resolution. */
 export type ResolveProblemIssueRangesResult = {
   resolved: ResolvedProblemIssue[];
+  unresolved: UnresolvedProblemIssue[];
   unresolvedCount: number;
 };
 
@@ -121,6 +131,7 @@ function chooseNonOverlappingCandidate(
 export function resolveProblemIssueRanges(input: ResolveProblemIssueRangesInput): ResolveProblemIssueRangesResult {
   const acceptedSpans: ProblemOffsetSpan[] = [];
   const resolved: ResolvedProblemIssue[] = [];
+  const unresolved: UnresolvedProblemIssue[] = [];
   let unresolvedCount = 0;
 
   for (const issue of input.issues) {
@@ -139,6 +150,10 @@ export function resolveProblemIssueRanges(input: ResolveProblemIssueRangesInput)
         acceptedSpans
       );
       if (!fallbackCandidate) {
+        unresolved.push({
+          issue,
+          reason: overlapsAcceptedSpan ? "overlapConflict" : "noAnchorMatch"
+        });
         unresolvedCount += 1;
         continue;
       }
@@ -147,6 +162,10 @@ export function resolveProblemIssueRanges(input: ResolveProblemIssueRangesInput)
     }
 
     if (!chosenSpan) {
+      unresolved.push({
+        issue,
+        reason: "noAnchorMatch"
+      });
       unresolvedCount += 1;
       continue;
     }
@@ -161,6 +180,7 @@ export function resolveProblemIssueRanges(input: ResolveProblemIssueRangesInput)
 
   return {
     resolved,
+    unresolved,
     unresolvedCount
   };
 }
