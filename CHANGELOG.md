@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+### Patch Changes
+
+- a4dabcd: Fix Stego comment conversion to use stdin payloads (`--input -`) and improve compatibility with Stego CLI comment command invocation.
+
 ## 0.5.0
 
 ### Minor Changes
