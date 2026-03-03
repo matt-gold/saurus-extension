@@ -606,9 +606,11 @@ export class ProblemFinderService implements vscode.Disposable {
     return [
       issue.question,
       "",
-      `Why it matters: ${issue.rationale}`,
-      `Fix hint: ${issue.fixHint}`,
-      `Severity: ${toSeverityLabel(issue.severity)}`
+      issue.rationale,
+      "",
+      `_Suggestion:_ ${issue.fixHint}`,
+      "",
+      `_Severity:_ ${toSeverityLabel(issue.severity)}`
     ].join("\n");
   }
 

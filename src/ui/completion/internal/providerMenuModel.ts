@@ -229,6 +229,11 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
     const aiSuggestionDetail = input.aiCached
       ? `From ${input.aiProviderName} cache`
       : `From ${input.aiProviderName}`;
+    const generationInProgress = input.sourceStates.ai === "generating" || input.sourceStates.thesaurus === "generating";
+    const showRefreshAction = !generationInProgress
+      || (input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt");
+    const showRefreshWithPromptAction = !generationInProgress
+      || (input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt");
 
     if (renderState.ai.kind === "results") {
       pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
@@ -243,31 +248,35 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
       });
     }
 
-    items.push({
-      kind: "refresh",
-      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? "$(loading~spin) Generating AI suggestions..."
-        : "↻ Generate more",
-      insertText: input.placeholderRawText,
-      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refresh"
-        ? `Saurus is requesting options from ${input.aiProviderName}`
-        : `with ${input.aiProviderName}`,
-      sortText: "9900",
-      disabled: input.sourceStates.ai === "generating"
-    });
+    if (showRefreshAction) {
+      items.push({
+        kind: "refresh",
+        label: input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt"
+          ? "$(loading~spin) Generating AI suggestions..."
+          : "↻ Generate more",
+        insertText: input.placeholderRawText,
+        detail: input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt"
+          ? `Saurus is requesting options from ${input.aiProviderName}`
+          : `with ${input.aiProviderName}`,
+        sortText: "9900",
+        disabled: input.sourceStates.ai === "generating"
+      });
+    }
 
-    items.push({
-      kind: "refreshWithPrompt",
-      label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
-        ? "$(loading~spin) Generating with prompt..."
-        : "↻ Generate w/ prompt",
-      insertText: input.placeholderRawText,
-      detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
-        ? "Generating with your custom direction"
-        : `with ${input.aiProviderName}`,
-      sortText: "9901",
-      disabled: input.sourceStates.ai === "generating"
-    });
+    if (showRefreshWithPromptAction) {
+      items.push({
+        kind: "refreshWithPrompt",
+        label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
+          ? "$(loading~spin) Generating with prompt..."
+          : "↻ Generate w/ prompt",
+        insertText: input.placeholderRawText,
+        detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
+          ? "Generating with your custom direction"
+          : `with ${input.aiProviderName}`,
+        sortText: "9901",
+        disabled: input.sourceStates.ai === "generating"
+      });
+    }
   }
 
   return items;

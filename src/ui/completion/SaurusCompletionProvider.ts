@@ -115,6 +115,23 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
 
     const completionItems: vscode.CompletionItem[] = [];
     const preferRefreshSelection = lookup.preferRefreshSelection;
+    const preferredActionKind: "refresh" | "refreshWithPrompt" = lookup.aiActiveAction === "refreshWithPrompt"
+      ? "refreshWithPrompt"
+      : "refresh";
+    const availableActionKinds = new Set(
+      menuItems
+        .filter((menuItem) => menuItem.kind === "refresh" || menuItem.kind === "refreshWithPrompt")
+        .map((menuItem) => menuItem.kind)
+    );
+    const preselectedActionKind = preferRefreshSelection
+      ? (
+        availableActionKinds.has(preferredActionKind)
+          ? preferredActionKind
+          : (availableActionKinds.has("refresh")
+            ? "refresh"
+            : (availableActionKinds.has("refreshWithPrompt") ? "refreshWithPrompt" : undefined))
+      )
+      : undefined;
     let didPreselectAny = false;
 
     for (const menuItem of menuItems) {
@@ -157,7 +174,7 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
         // Keep this row command-only; do not edit document text.
         item.insertText = "";
         item.range = new vscode.Range(position, position);
-        if (menuItem.kind === "refresh" && preferRefreshSelection) {
+        if (menuItem.kind === preselectedActionKind && preferRefreshSelection) {
           item.preselect = true;
           didPreselectAny = true;
         }

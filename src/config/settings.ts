@@ -7,6 +7,9 @@ export const DEFAULT_PROMPT_TEMPLATE = `You are helping with literary prose revi
 
 Return valid JSON only with this shape: {"suggestions":["..."]}.
 Keep options concise and stylistically consistent with nearby prose.
+Prefer single-word replacements whenever they preserve meaning and tone.
+For multi-word placeholders, include multiple single-word options (ideally at least half of the list).
+Use multi-word replacements only when a single word would lose essential meaning or voice.
 Do not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).
 
 Placeholder text:

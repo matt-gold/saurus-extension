@@ -126,9 +126,7 @@ test("shows disabled generate actions while AI refresh is active", () => {
   assert.equal(refresh?.disabled, true);
 
   const withPrompt = items.find((item) => item.kind === "refreshWithPrompt");
-  assert.ok(withPrompt);
-  assert.equal(withPrompt?.label, "↻ Generate w/ prompt");
-  assert.equal(withPrompt?.disabled, true);
+  assert.equal(withPrompt, undefined);
 });
 
 test("shows disabled generate actions while prompt refresh is active", () => {
@@ -146,9 +144,7 @@ test("shows disabled generate actions while prompt refresh is active", () => {
   }));
 
   const refresh = items.find((item) => item.kind === "refresh");
-  assert.ok(refresh);
-  assert.equal(refresh?.label, "↻ Generate more");
-  assert.equal(refresh?.disabled, true);
+  assert.equal(refresh, undefined);
 
   const withPrompt = items.find((item) => item.kind === "refreshWithPrompt");
   assert.ok(withPrompt);
@@ -156,7 +152,7 @@ test("shows disabled generate actions while prompt refresh is active", () => {
   assert.equal(withPrompt?.disabled, true);
 });
 
-test("keeps action rows visible and last while AI is loading with existing results", () => {
+test("shows only active action row while AI is loading with existing results", () => {
   const items = buildProviderItems(makeInput({
     sourceStates: { thesaurus: "ready", ai: "generating" },
     hasEntry: true,
@@ -167,11 +163,25 @@ test("keeps action rows visible and last while AI is loading with existing resul
     aiAutoRun: true
   }));
 
-  const tail = items.slice(-2);
-  assert.deepEqual(tail.map((item) => item.kind), ["refresh", "refreshWithPrompt"]);
-  assert.equal(items.at(-2)?.disabled, true);
-  assert.equal(items.at(-1)?.disabled, true);
+  const refreshItems = items.filter((item) => item.kind === "refresh" || item.kind === "refreshWithPrompt");
+  assert.equal(refreshItems.length, 1);
+  assert.equal(refreshItems[0]?.kind, "refresh");
+  assert.equal(refreshItems[0]?.disabled, true);
   assert.equal(items.some((item) => item.kind === "loading" && item.source === "ai"), false);
+  assert.equal(refreshItems[0]?.label, "$(loading~spin) Generating AI suggestions...");
+});
+
+test("hides AI generation actions while thesaurus is generating", () => {
+  const items = buildProviderItems(makeInput({
+    sourceStates: { thesaurus: "generating", ai: "idle" },
+    hasEntry: true,
+    thesaurusOptions: [],
+    aiOptions: ["clear phrasing"],
+    aiAutoRun: false
+  }));
+
+  assert.equal(items.some((item) => item.kind === "refresh"), false);
+  assert.equal(items.some((item) => item.kind === "refreshWithPrompt"), false);
 });
 
 test("formats ai detail as only new when no cached results yet", () => {
