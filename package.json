@@ -336,13 +336,6 @@
         "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
       },
       {
-        "command": "saurus.showThesaurusOnlySuggestions",
-        "mac": "cmd+shift+z",
-        "linux": "ctrl+shift+z",
-        "win": "ctrl+shift+z",
-        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
-      },
-      {
         "command": "saurus.exitPlaceholderSuggestions",
         "key": "escape",
         "when": "suggestWidgetVisible && editorTextFocus"
