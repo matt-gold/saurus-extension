@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+### Patch Changes
+
+- 83a9965: Remove the default thesaurus-only hotkey (`cmd/ctrl+shift+z`) to avoid conflicting with system/editor redo shortcuts.
+
 ## 0.5.2
 
 ### Patch Changes
