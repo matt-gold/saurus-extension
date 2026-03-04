@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import {
-  clearLegacyThesaurusApiKeySettings,
   getStoredThesaurusApiKey,
   storeThesaurusApiKey
 } from "../../../config";
@@ -65,7 +64,6 @@ export async function configureThesaurusProviderCommand(
   await cfg.update("thesaurus.provider", "merriamWebster", target);
   await cfg.update("thesaurus.enabled", true, target);
   await storeThesaurusApiKey(secrets, trimmedKey);
-  await clearLegacyThesaurusApiKeySettings();
   void vscode.window.showInformationMessage("Saurus: Merriam-Webster API key saved in secure storage.");
   return "configured";
 }

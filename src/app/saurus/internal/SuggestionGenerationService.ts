@@ -25,8 +25,7 @@ import {
   ThesaurusRequestError
 } from "../../../services/thesaurus";
 import {
-  getStoredThesaurusApiKey,
-  migrateLegacyThesaurusApiKeyToSecretStorage
+  getStoredThesaurusApiKey
 } from "../../../config";
 import { findPlaceholderAtPosition } from "../../../core/placeholder";
 import { SuggestionCache } from "../../../state";
@@ -446,11 +445,7 @@ export class SuggestionGenerationService {
     }
 
     const provider = createThesaurusProvider(settings.thesaurusProvider);
-    let apiKey = await getStoredThesaurusApiKey(this.deps.extensionContext.secrets);
-    if (apiKey.length === 0) {
-      await migrateLegacyThesaurusApiKeyToSecretStorage(this.deps.extensionContext);
-      apiKey = await getStoredThesaurusApiKey(this.deps.extensionContext.secrets);
-    }
+    const apiKey = await getStoredThesaurusApiKey(this.deps.extensionContext.secrets);
 
     return provider.lookup(lookupTerm, {
       apiKey,
