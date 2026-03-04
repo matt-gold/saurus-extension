@@ -147,7 +147,6 @@ export function getSettings(document?: vscode.TextDocument): SaurusSettings {
     aiPrefix: cfg.get<string>("menu.aiPrefix", DEFAULT_AI_PREFIX),
     thesaurusEnabled: cfg.get<boolean>("thesaurus.enabled", false),
     thesaurusProvider: sanitizeThesaurusProvider(thesaurusProviderRaw),
-    thesaurusApiKey: cfg.get<string>("thesaurus.apiKey", "").trim(),
     thesaurusTimeoutMs,
     thesaurusMaxSuggestions,
     cachePersistAcrossReload: cfg.get<boolean>("cache.persistAcrossReload", false),

@@ -149,27 +149,6 @@ export class SaurusCompletionProvider implements vscode.CompletionItemProvider {
         );
       }
 
-      if (menuItem.kind === "heading") {
-        // Hard-close row: remove delimiters and close suggestions.
-        item.insertText = "";
-        item.range = new vscode.Range(position, position);
-        if (!preferRefreshSelection) {
-          item.preselect = true;
-          didPreselectAny = true;
-        }
-        item.command = {
-          command: "saurus.exitPlaceholderSuggestions",
-          title: "Exit placeholder suggestions",
-          arguments: [
-            document.uri.toString(),
-            lookup.match.innerRange.start.line,
-            lookup.match.innerRange.start.character
-          ]
-        };
-        completionItems.push(item);
-        continue;
-      }
-
       if (menuItem.kind === "refresh" || menuItem.kind === "refreshWithPrompt") {
         // Keep this row command-only; do not edit document text.
         item.insertText = "";

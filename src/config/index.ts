@@ -4,3 +4,7 @@ export {
   disableAutoTriggerForWorkspace,
   getSettings
 } from "./settings";
+export {
+  getStoredThesaurusApiKey,
+  storeThesaurusApiKey
+} from "./secrets";

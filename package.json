@@ -136,11 +136,6 @@
           ],
           "description": "Thesaurus provider implementation."
         },
-        "saurus.thesaurus.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for the configured thesaurus provider."
-        },
         "saurus.thesaurus.timeoutMs": {
           "type": "number",
           "default": 10000,

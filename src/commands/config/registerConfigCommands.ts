@@ -4,10 +4,16 @@ import { configureAiProviderCommand } from "./internal/configureAiProvider";
 import { configureThesaurusProviderCommand } from "./internal/configureThesaurusProvider";
 
 /** Registers Saurus configuration commands. */
-export function registerConfigCommands(subscriptions: vscode.Disposable[]): void {
+export function registerConfigCommands(
+  extensionContext: vscode.ExtensionContext,
+  subscriptions: vscode.Disposable[]
+): void {
   subscriptions.push(
     vscode.commands.registerCommand("saurus.configureThesaurusProvider", async () => {
-      await configureThesaurusProviderCommand(vscode.window.activeTextEditor?.document);
+      await configureThesaurusProviderCommand(
+        extensionContext.secrets,
+        vscode.window.activeTextEditor?.document
+      );
     })
   );
 

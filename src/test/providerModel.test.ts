@@ -24,15 +24,15 @@ function makeInput(overrides: Partial<BuildProviderItemsInput> = {}): BuildProvi
   };
 }
 
-test("shows heading and AI actions when no entry and all sources idle", () => {
+test("shows only AI actions when no entry and all sources idle", () => {
   const items = buildProviderItems(makeInput());
-  assert.equal(items[0]?.kind, "heading");
+  assert.equal(items.some((item) => item.kind === "suggestion"), false);
   assert.equal(items.some((item) => item.kind === "refresh"), true);
   assert.equal(items.some((item) => item.kind === "refreshWithPrompt"), true);
   assert.equal(items.some((item) => item.kind === "empty"), false);
 });
 
-test("renders heading row and prefixed source suggestions", () => {
+test("renders prefixed source suggestions", () => {
   const items = buildProviderItems(makeInput({
     sourceStates: { thesaurus: "ready", ai: "ready" },
     hasEntry: true,
@@ -46,14 +46,11 @@ test("renders heading row and prefixed source suggestions", () => {
     aiAutoRun: true
   }));
 
-  assert.equal(items[0].kind, "heading");
-  assert.equal(items[0].label, "🦖  (Select a replacement below)");
-  assert.equal(items[0].detail, "[Esc] to exit");
-  assert.equal(items[1].label, "📖 1  lucid");
-  assert.equal(items[2].label, "📖 2  clear");
+  assert.equal(items[0].label, "📖 1  lucid");
+  assert.equal(items[1].label, "📖 2  clear");
 
-  assert.equal(items[3].label, "✨ 1  pellucid phrase");
-  assert.equal(items[3].detail, "From Codex");
+  assert.equal(items[2].label, "✨ 1  pellucid phrase");
+  assert.equal(items[2].detail, "From Codex");
 
   assert.equal(items.at(-2)?.kind, "refresh");
   assert.equal(items.at(-2)?.label, "↻ Generate more");
@@ -77,6 +74,36 @@ test("does not render source header rows", () => {
   assert.equal(items.some((item) => item.label.includes("--- Thesaurus ---")), false);
   assert.equal(items.some((item) => item.label.includes("--- AI ---")), false);
   assert.equal(items.some((item) => item.kind === "empty" && item.source === "ai"), false);
+});
+
+test("shows a single no-suggestions row when all sources are empty", () => {
+  const items = buildProviderItems(makeInput({
+    sourceStates: { thesaurus: "ready", ai: "ready" },
+    hasEntry: true,
+    thesaurusOptions: [],
+    aiOptions: [],
+    aiAutoRun: true
+  }));
+
+  const emptyRows = items.filter((item) => item.kind === "empty");
+  assert.equal(emptyRows.length, 1);
+  assert.equal(emptyRows[0]?.label, "No suggestions were found");
+  assert.equal(items.some((item) => item.label.includes("No thesaurus suggestions found")), false);
+  assert.equal(items.some((item) => item.label.includes("No AI suggestions yet")), false);
+});
+
+test("does not show global no-suggestions row while generation is in progress", () => {
+  const items = buildProviderItems(makeInput({
+    sourceStates: { thesaurus: "idle", ai: "generating" },
+    hasEntry: true,
+    thesaurusOptions: [],
+    aiOptions: [],
+    aiAutoRun: true,
+    aiActiveAction: "refresh"
+  }));
+
+  assert.equal(items.some((item) => item.kind === "empty" && item.label === "No suggestions were found"), false);
+  assert.equal(items.some((item) => item.kind === "refresh"), true);
 });
 
 test("shows thesaurus loading row while fetching", () => {

@@ -24,6 +24,9 @@ import {
   ThesaurusLookupResult,
   ThesaurusRequestError
 } from "../../../services/thesaurus";
+import {
+  getStoredThesaurusApiKey
+} from "../../../config";
 import { findPlaceholderAtPosition } from "../../../core/placeholder";
 import { SuggestionCache } from "../../../state";
 import {
@@ -442,8 +445,10 @@ export class SuggestionGenerationService {
     }
 
     const provider = createThesaurusProvider(settings.thesaurusProvider);
+    const apiKey = await getStoredThesaurusApiKey(this.deps.extensionContext.secrets);
+
     return provider.lookup(lookupTerm, {
-      apiKey: settings.thesaurusApiKey,
+      apiKey,
       timeoutMs: settings.thesaurusTimeoutMs,
       maxSuggestions: settings.thesaurusMaxSuggestions
     });

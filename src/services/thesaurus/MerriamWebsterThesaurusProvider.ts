@@ -141,7 +141,7 @@ export class MerriamWebsterThesaurusProvider implements ThesaurusProvider {
   public async lookup(term: string, options: ThesaurusLookupOptions): Promise<ThesaurusLookupResult> {
     if (options.apiKey.trim().length === 0) {
       throw new ThesaurusConfigError(
-        "Merriam-Webster thesaurus API key is missing. Set saurus.thesaurus.apiKey."
+        "Merriam-Webster thesaurus API key is missing. Run 'Saurus: Configure Thesaurus Provider' to store it securely."
       );
     }
 

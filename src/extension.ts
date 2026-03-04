@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, provider));
   context.subscriptions.push(highlighter);
   registerSaurusCommands(controller, context.subscriptions);
-  registerConfigCommands(context.subscriptions);
+  registerConfigCommands(context, context.subscriptions);
 
   const lastSuggestionKeyByDocument = new Map<string, string | undefined>();
   const autoTriggerTimers = new Map<string, NodeJS.Timeout>();

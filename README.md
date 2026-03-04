@@ -76,10 +76,11 @@ Optional feature (disabled by default, recommended for deterministic single-word
 ```json
 {
   "saurus.thesaurus.enabled": true,
-  "saurus.thesaurus.provider": "merriamWebster",
-  "saurus.thesaurus.apiKey": "YOUR_MW_API_KEY"
+  "saurus.thesaurus.provider": "merriamWebster"
 }
 ```
+
+Then run `Saurus: Configure Thesaurus Provider` and enter your Merriam-Webster key. Saurus stores it in VS Code secure storage.
 
 ### AI Provider: Copilot Chat (Native, default)
 
@@ -205,7 +206,6 @@ All settings are under `saurus.*`.
 - `saurus.delimiters.close`
 - `saurus.thesaurus.enabled`
 - `saurus.thesaurus.provider`
-- `saurus.thesaurus.apiKey`
 - `saurus.thesaurus.timeoutMs`
 - `saurus.thesaurus.maxSuggestions` (default `20`)
 - `saurus.ai.autoGenerateOnOpen`
@@ -272,7 +272,7 @@ Example workspace settings:
 - `No Copilot Chat models are available`: sign in to Copilot Chat in VS Code or switch to a CLI provider.
 - `AI CLI was not found`: set `saurus.ai.path` or install the selected CLI provider.
 - `AI CLI is not logged in`: log in for your selected CLI provider (Codex: `codex login`; Copilot via `gh`: `gh auth login`; Claude: run `claude` and complete login or set `ANTHROPIC_API_KEY`).
-- `Merriam-Webster thesaurus API key is missing`: set `saurus.thesaurus.apiKey`.
+- `Merriam-Webster thesaurus API key is missing`: run `Saurus: Configure Thesaurus Provider` and store your key in secure storage.
 - No new results on refresh: adjust prompt template or context window.
 
 ## Performance Tips
