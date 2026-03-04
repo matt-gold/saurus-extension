@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4
+
+### Patch Changes
+
+- 8a9a6b2: Store Merriam-Webster API keys in VS Code Secret Storage instead of settings, and simplify suggestion menu empty states by removing per-source empty rows in favor of a single global no-suggestions message.
+
 ## 0.5.3
 
 ### Patch Changes
