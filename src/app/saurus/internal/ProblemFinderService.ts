@@ -57,6 +57,11 @@ type StegoAddCommentResponse = {
   message?: string;
 };
 
+type StegoCommentRange = {
+  start: { line: number; col: number };
+  end: { line: number; col: number };
+};
+
 const PROBLEM_FINDER_TARGET_CHAR_CAP = 12000;
 const IGNORE_PROBLEM_COMMAND = "saurus.ignoreProblem";
 const FIX_PROBLEM_COMMAND = "saurus.fixProblem";
@@ -183,18 +188,17 @@ export class ProblemFinderService implements vscode.Disposable {
       return;
     }
 
+    const savedBeforeConvert = await document.save();
+    if (!savedBeforeConvert) {
+      void vscode.window.showInformationMessage("Saurus: convert canceled because the file was not saved.");
+      return;
+    }
+
     const payload = {
       message: this.buildStegoCommentMessage(target.issue),
       author: "Saurus",
-      range: {
-        start: {
-          line: target.start.line,
-          col: target.start.character
-        },
-        end: {
-          line: target.end.line,
-          col: target.end.character
-        }
+      anchor: {
+        range: toStegoCommentRange(target)
       },
       meta: {
         source: "saurus",
@@ -259,10 +263,16 @@ export class ProblemFinderService implements vscode.Disposable {
       return;
     }
 
+    const document = editor.document;
+    const savedBeforeDiagnosis = await document.save();
+    if (!savedBeforeDiagnosis) {
+      void vscode.window.showInformationMessage("Saurus: diagnosis canceled because the file was not saved.");
+      return;
+    }
+
     let rerunRequested = false;
     this.inFlight = true;
     try {
-      const document = editor.document;
       const settings = this.deps.getSettings(document);
 
       if (!settings.enabled || !settings.languages.includes(document.languageId)) {
@@ -449,6 +459,10 @@ export class ProblemFinderService implements vscode.Disposable {
         void vscode.window.showErrorMessage(`Saurus Problem Finder: ${this.getErrorMessage(error)}`);
       }
     } finally {
+      const savedAfterDiagnosis = await document.save();
+      if (!savedAfterDiagnosis) {
+        void vscode.window.showWarningMessage("Saurus: diagnosis finished, but saving the file was canceled.");
+      }
       this.inFlight = false;
     }
 
@@ -1124,4 +1138,20 @@ function truncate(value: string, maxLength: number): string {
   }
 
   return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function toStegoCommentRange(target: {
+  start: { line: number; character: number };
+  end: { line: number; character: number };
+}): StegoCommentRange {
+  return {
+    start: {
+      line: target.start.line + 1,
+      col: target.start.character
+    },
+    end: {
+      line: target.end.line + 1,
+      col: target.end.character
+    }
+  };
 }
