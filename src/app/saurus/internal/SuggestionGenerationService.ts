@@ -24,6 +24,10 @@ import {
   ThesaurusLookupResult,
   ThesaurusRequestError
 } from "../../../services/thesaurus";
+import {
+  getStoredThesaurusApiKey,
+  migrateLegacyThesaurusApiKeyToSecretStorage
+} from "../../../config";
 import { findPlaceholderAtPosition } from "../../../core/placeholder";
 import { SuggestionCache } from "../../../state";
 import {
@@ -442,8 +446,14 @@ export class SuggestionGenerationService {
     }
 
     const provider = createThesaurusProvider(settings.thesaurusProvider);
+    let apiKey = await getStoredThesaurusApiKey(this.deps.extensionContext.secrets);
+    if (apiKey.length === 0) {
+      await migrateLegacyThesaurusApiKeyToSecretStorage(this.deps.extensionContext);
+      apiKey = await getStoredThesaurusApiKey(this.deps.extensionContext.secrets);
+    }
+
     return provider.lookup(lookupTerm, {
-      apiKey: settings.thesaurusApiKey,
+      apiKey,
       timeoutMs: settings.thesaurusTimeoutMs,
       maxSuggestions: settings.thesaurusMaxSuggestions
     });

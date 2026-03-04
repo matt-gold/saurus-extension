@@ -55,7 +55,6 @@ export type SaurusSettings = {
     aiPrefix: string;
     thesaurusEnabled: boolean;
     thesaurusProvider: ThesaurusProviderKind;
-    thesaurusApiKey: string;
     thesaurusTimeoutMs: number;
     thesaurusMaxSuggestions: number;
     cachePersistAcrossReload: boolean;

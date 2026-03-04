@@ -1,7 +1,7 @@
 import { SourceGenerationStates, SuggestionSourceFilter } from "../../../types";
 
 /** Represents provider menu item kinds. */
-export type ProviderMenuItemKind = "heading" | "refresh" | "refreshWithPrompt" | "suggestion" | "loading" | "empty";
+export type ProviderMenuItemKind = "refresh" | "refreshWithPrompt" | "suggestion" | "loading" | "empty";
 /** Describes provider menu item source. */
 export type ProviderMenuItemSource = "thesaurus" | "ai";
 
@@ -185,14 +185,6 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
   const items: ProviderMenuItem[] = [];
   const renderState = buildProviderMenuRenderState(input);
 
-  items.push({
-    kind: "heading",
-    label: "🦖  (Select a replacement below)",
-    insertText: "",
-    detail: "[Esc] to exit",
-    sortText: "0000"
-  });
-
   if (renderState.thesaurus.kind !== "hidden") {
     const thesaurusProviderName = formatThesaurusProviderName(input.thesaurusProvider);
     const thesaurusFetching = renderState.thesaurus.showLoadingRow;
@@ -210,73 +202,72 @@ export function buildProviderItems(input: BuildProviderItemsInput): ProviderMenu
 
     if (renderState.thesaurus.kind === "results") {
       pushSuggestionItems(items, "thesaurus", input.thesaurusOptions, "011", input.thesaurusPrefix, 1, thesaurusSuggestionDetail);
-    } else if (
-      (renderState.thesaurus.kind === "empty" || renderState.thesaurus.kind === "error") &&
-      !renderState.thesaurus.showLoadingRow
-    ) {
-      items.push({
-        kind: "empty",
-        source: "thesaurus",
-        label: withPrefix(input.thesaurusPrefix, "No thesaurus suggestions found"),
-        insertText: "",
-        detail: "Try a simpler placeholder word",
-        sortText: "0199"
-      });
     }
   }
+
+  let showRefreshAction = false;
+  let showRefreshWithPromptAction = false;
+  let refreshActionLoading = false;
+  let refreshWithPromptActionLoading = false;
 
   if (renderState.ai.kind !== "hidden") {
     const aiSuggestionDetail = input.aiCached
       ? `From ${input.aiProviderName} cache`
       : `From ${input.aiProviderName}`;
     const generationInProgress = input.sourceStates.ai === "generating" || input.sourceStates.thesaurus === "generating";
-    const showRefreshAction = !generationInProgress
+    showRefreshAction = !generationInProgress
       || (input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt");
-    const showRefreshWithPromptAction = !generationInProgress
+    showRefreshWithPromptAction = !generationInProgress
       || (input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt");
+    refreshActionLoading = input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt";
+    refreshWithPromptActionLoading = input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt";
 
     if (renderState.ai.kind === "results") {
       pushSuggestionItems(items, "ai", input.aiOptions, "021", input.aiPrefix, 1, aiSuggestionDetail);
-    } else if (renderState.ai.kind === "empty" && !renderState.ai.showLoadingRow) {
-      items.push({
-        kind: "empty",
-        source: "ai",
-        label: withPrefix(input.aiPrefix, "No AI suggestions yet"),
-        insertText: "",
-        detail: "Try ↻ Generate more",
-        sortText: "0299"
-      });
     }
+  }
 
-    if (showRefreshAction) {
-      items.push({
-        kind: "refresh",
-        label: input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt"
-          ? "$(loading~spin) Generating AI suggestions..."
-          : "↻ Generate more",
-        insertText: input.placeholderRawText,
-        detail: input.sourceStates.ai === "generating" && input.aiActiveAction !== "refreshWithPrompt"
-          ? `Saurus is requesting options from ${input.aiProviderName}`
-          : `with ${input.aiProviderName}`,
-        sortText: "9900",
-        disabled: input.sourceStates.ai === "generating"
-      });
-    }
+  const hasSuggestions = items.some((item) => item.kind === "suggestion");
+  const hasLoadingRows = items.some((item) => item.kind === "loading");
+  const generationInProgress = input.sourceStates.thesaurus === "generating" || input.sourceStates.ai === "generating";
+  if (renderState.visibility === "content" && !hasSuggestions && !hasLoadingRows && !generationInProgress) {
+    items.push({
+      kind: "empty",
+      label: "No suggestions were found",
+      insertText: "",
+      detail: "Try generating again",
+      sortText: "9800"
+    });
+  }
 
-    if (showRefreshWithPromptAction) {
-      items.push({
-        kind: "refreshWithPrompt",
-        label: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
-          ? "$(loading~spin) Generating with prompt..."
-          : "↻ Generate w/ prompt",
-        insertText: input.placeholderRawText,
-        detail: input.sourceStates.ai === "generating" && input.aiActiveAction === "refreshWithPrompt"
-          ? "Generating with your custom direction"
-          : `with ${input.aiProviderName}`,
-        sortText: "9901",
-        disabled: input.sourceStates.ai === "generating"
-      });
-    }
+  if (renderState.ai.kind !== "hidden" && showRefreshAction) {
+    items.push({
+      kind: "refresh",
+      label: refreshActionLoading
+        ? "$(loading~spin) Generating AI suggestions..."
+        : "↻ Generate more",
+      insertText: input.placeholderRawText,
+      detail: refreshActionLoading
+        ? `Saurus is requesting options from ${input.aiProviderName}`
+        : `with ${input.aiProviderName}`,
+      sortText: "9900",
+      disabled: input.sourceStates.ai === "generating"
+    });
+  }
+
+  if (renderState.ai.kind !== "hidden" && showRefreshWithPromptAction) {
+    items.push({
+      kind: "refreshWithPrompt",
+      label: refreshWithPromptActionLoading
+        ? "$(loading~spin) Generating with prompt..."
+        : "↻ Generate w/ prompt",
+      insertText: input.placeholderRawText,
+      detail: refreshWithPromptActionLoading
+        ? "Generating with your custom direction"
+        : `with ${input.aiProviderName}`,
+      sortText: "9901",
+      disabled: input.sourceStates.ai === "generating"
+    });
   }
 
   return items;

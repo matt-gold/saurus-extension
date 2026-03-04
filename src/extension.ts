@@ -7,6 +7,7 @@ import { PlaceholderEditActions } from "./app/saurus/internal/PlaceholderEditAct
 import { SuggestionGenerationService } from "./app/saurus/internal/SuggestionGenerationService";
 import { registerSaurusCommands } from "./commands";
 import { registerConfigCommands } from "./commands/config";
+import { migrateLegacyThesaurusApiKeyToSecretStorage } from "./config";
 import { findPlaceholderAtPosition } from "./core/placeholder";
 import { SaurusCompletionProvider } from "./ui/completion";
 import { PlaceholderHighlighter } from "./ui/highlight";
@@ -16,6 +17,8 @@ const PERSISTED_CACHE_FILENAME = "saurus-cache-v1.json";
 
 /** Activates the Saurus extension and wires VS Code integrations. */
 export function activate(context: vscode.ExtensionContext): void {
+  void migrateLegacyThesaurusApiKeyToSecretStorage(context).catch(() => undefined);
+
   const schemaPath = context.asAbsolutePath(path.join("resources", "suggestions.schema.json"));
   const problemFinderSchemaPath = context.asAbsolutePath(path.join("resources", "problem-finder.schema.json"));
   const persistentCachePath = path.join(context.globalStorageUri.fsPath, PERSISTED_CACHE_FILENAME);
@@ -45,7 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, provider));
   context.subscriptions.push(highlighter);
   registerSaurusCommands(controller, context.subscriptions);
-  registerConfigCommands(context.subscriptions);
+  registerConfigCommands(context, context.subscriptions);
 
   const lastSuggestionKeyByDocument = new Map<string, string | undefined>();
   const autoTriggerTimers = new Map<string, NodeJS.Timeout>();
