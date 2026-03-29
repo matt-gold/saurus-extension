@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+### Minor Changes
+
+- 64c9976: Refactor Saurus into an AI-only writing workflow with Quick Fix-based suggestions, prompt-aware placeholders, stronger diagnosis and placeholder editing commands, and cleaner internal architecture for sessions, requests, and suggestion state.
+
 ## 0.5.5
 
 ### Patch Changes
