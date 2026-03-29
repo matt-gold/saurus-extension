@@ -1,13 +1,16 @@
 import * as vscode from "vscode";
 import { SaurusController } from "../../app";
-import { findAllPlaceholdersInLine } from "../../core/placeholder";
+import { findAllPlaceholdersInLine, parsePlaceholderContent } from "../../core/placeholder";
 
 type HighlightSettings = {
   enabled: boolean;
   backgroundColor: string;
   borderColor: string;
   delimiterColor: string;
-  textColor: string;};
+  textColor: string;
+  promptTokenColor: string;
+  promptTextColor: string;
+};
 
 function getHighlightSettings(document?: vscode.TextDocument): HighlightSettings {
   const cfg = vscode.workspace.getConfiguration("saurus", document);
@@ -16,7 +19,9 @@ function getHighlightSettings(document?: vscode.TextDocument): HighlightSettings
     backgroundColor: cfg.get<string>("placeholderHighlight.backgroundColor", "rgba(34, 197, 94, 0.16)"),
     borderColor: cfg.get<string>("placeholderHighlight.borderColor", "rgba(74, 222, 128, 0.55)"),
     delimiterColor: cfg.get<string>("placeholderHighlight.delimiterColor", "#86efac"),
-    textColor: cfg.get<string>("placeholderHighlight.textColor", "#dcfce7")
+    textColor: cfg.get<string>("placeholderHighlight.textColor", "#dcfce7"),
+    promptTokenColor: "#fcd34d",
+    promptTextColor: "#fde68a"
   };
 }
 
@@ -28,12 +33,16 @@ export class PlaceholderHighlighter implements vscode.Disposable {
   private fullDecoration: vscode.TextEditorDecorationType;
   private delimiterDecoration: vscode.TextEditorDecorationType;
   private innerDecoration: vscode.TextEditorDecorationType;
+  private promptTokenDecoration: vscode.TextEditorDecorationType;
+  private promptTextDecoration: vscode.TextEditorDecorationType;
 
   public constructor(private readonly controller: SaurusController) {
     const defaults = getHighlightSettings();
     this.fullDecoration = vscode.window.createTextEditorDecorationType({});
     this.delimiterDecoration = vscode.window.createTextEditorDecorationType({});
     this.innerDecoration = vscode.window.createTextEditorDecorationType({});
+    this.promptTokenDecoration = vscode.window.createTextEditorDecorationType({});
+    this.promptTextDecoration = vscode.window.createTextEditorDecorationType({});
     this.ensureDecorationStyles(defaults);
   }
 
@@ -46,6 +55,8 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     this.fullDecoration.dispose();
     this.delimiterDecoration.dispose();
     this.innerDecoration.dispose();
+    this.promptTokenDecoration.dispose();
+    this.promptTextDecoration.dispose();
   }
 
   public refreshVisibleEditors(): void {
@@ -125,6 +136,8 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     const fullRanges: vscode.Range[] = [];
     const delimiterRanges: vscode.Range[] = [];
     const innerRanges: vscode.Range[] = [];
+    const promptTokenRanges: vscode.Range[] = [];
+    const promptTextRanges: vscode.Range[] = [];
 
     for (let line = 0; line < document.lineCount; line += 1) {
       const text = document.lineAt(line).text;
@@ -134,8 +147,22 @@ export class PlaceholderHighlighter implements vscode.Disposable {
         delimiterRanges.push(new vscode.Range(line, match.start, line, match.innerStart));
         delimiterRanges.push(new vscode.Range(line, match.innerEnd, line, match.end));
 
-        if (match.innerEnd > match.innerStart) {
-          innerRanges.push(new vscode.Range(line, match.innerStart, line, match.innerEnd));
+        const parsed = parsePlaceholderContent(match.rawInnerText);
+        if (!parsed.hasPrompt) {
+          if (match.innerEnd > match.innerStart) {
+            innerRanges.push(new vscode.Range(line, match.innerStart, line, match.innerEnd));
+          }
+          continue;
+        }
+
+        const promptTokenStart = match.innerStart + parsed.separatorIndex;
+        const promptTokenEnd = promptTokenStart + 2;
+        if (promptTokenStart > match.innerStart) {
+          innerRanges.push(new vscode.Range(line, match.innerStart, line, promptTokenStart));
+        }
+        promptTokenRanges.push(new vscode.Range(line, promptTokenStart, line, promptTokenEnd));
+        if (match.innerEnd > promptTokenEnd) {
+          promptTextRanges.push(new vscode.Range(line, promptTokenEnd, line, match.innerEnd));
         }
       }
     }
@@ -143,12 +170,16 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     editor.setDecorations(this.fullDecoration, fullRanges);
     editor.setDecorations(this.delimiterDecoration, delimiterRanges);
     editor.setDecorations(this.innerDecoration, innerRanges);
+    editor.setDecorations(this.promptTokenDecoration, promptTokenRanges);
+    editor.setDecorations(this.promptTextDecoration, promptTextRanges);
   }
 
   private clearEditorDecorations(editor: vscode.TextEditor): void {
     editor.setDecorations(this.fullDecoration, []);
     editor.setDecorations(this.delimiterDecoration, []);
     editor.setDecorations(this.innerDecoration, []);
+    editor.setDecorations(this.promptTokenDecoration, []);
+    editor.setDecorations(this.promptTextDecoration, []);
   }
 
   private ensureDecorationStyles(style: HighlightSettings): void {
@@ -160,6 +191,8 @@ export class PlaceholderHighlighter implements vscode.Disposable {
     this.fullDecoration.dispose();
     this.delimiterDecoration.dispose();
     this.innerDecoration.dispose();
+    this.promptTokenDecoration.dispose();
+    this.promptTextDecoration.dispose();
 
     this.fullDecoration = vscode.window.createTextEditorDecorationType({
       backgroundColor: style.backgroundColor,
@@ -174,6 +207,16 @@ export class PlaceholderHighlighter implements vscode.Disposable {
 
     this.innerDecoration = vscode.window.createTextEditorDecorationType({
       color: style.textColor
+    });
+
+    this.promptTokenDecoration = vscode.window.createTextEditorDecorationType({
+      color: style.promptTokenColor,
+      fontWeight: "700"
+    });
+
+    this.promptTextDecoration = vscode.window.createTextEditorDecorationType({
+      color: style.promptTextColor,
+      fontStyle: "italic"
     });
 
     this.styleKey = nextStyleKey;

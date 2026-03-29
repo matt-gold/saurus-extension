@@ -4,48 +4,41 @@ import * as path from "path";
 import { SuggestionCacheEntry, SuggestionKey } from "../types";
 
 type PersistedSuggestionCacheEntryV1 = {
-    thesaurusOptions: string[];
-    aiOptions: string[];
-    thesaurusInfo?: SuggestionCacheEntry["thesaurusInfo"];
-    thesaurusLastResponseCached?: boolean;
-    lastAiPrompt?: string;
-    lastAiModel?: string;
-    aiLoadedCount?: number;
-    aiLastAddedCount?: number;
-    aiLastResponseCached?: boolean;
-    seenNormalized: string[];
-    seenRaw: string[];
-    createdAt: number;
-    documentVersion: number;
-    documentUri: string;
-    lastAccessedAt?: number;
+  suggestions: string[];
+  lastPrompt?: string;
+  lastModel?: string;
+  loadedCount?: number;
+  lastAddedCount?: number;
+  lastResponseCached?: boolean;
+  seenNormalized: string[];
+  seenRaw: string[];
+  createdAt: number;
+  documentVersion: number;
+  documentUri: string;
+  lastAccessedAt?: number;
 };
 
 type PersistedCacheItemV1 = {
-    key: SuggestionKey;
-    entry: PersistedSuggestionCacheEntryV1;
+  key: SuggestionKey;
+  entry: PersistedSuggestionCacheEntryV1;
 };
 
-/** Describes the v1 on-disk format for persisted suggestion cache data. */
 /** Describes the v1 on-disk format for persisted suggestion cache data. */
 export type PersistedCacheFileV1 = {
-    version: 1;
-    savedAt: number;
-    entries: PersistedCacheItemV1[];
+  version: 1;
+  savedAt: number;
+  entries: PersistedCacheItemV1[];
 };
 
-/** Implements serialize entry. */
+/** Serializes an in-memory cache entry for persistence. */
 export function serializeEntry(entry: SuggestionCacheEntry): PersistedSuggestionCacheEntryV1 {
   return {
-    thesaurusOptions: [...entry.thesaurusOptions],
-    aiOptions: [...entry.aiOptions],
-    thesaurusInfo: entry.thesaurusInfo,
-    thesaurusLastResponseCached: entry.thesaurusLastResponseCached,
-    lastAiPrompt: entry.lastAiPrompt,
-    lastAiModel: entry.lastAiModel,
-    aiLoadedCount: entry.aiLoadedCount,
-    aiLastAddedCount: entry.aiLastAddedCount,
-    aiLastResponseCached: entry.aiLastResponseCached,
+    suggestions: [...entry.suggestions],
+    lastPrompt: entry.lastPrompt,
+    lastModel: entry.lastModel,
+    loadedCount: entry.loadedCount,
+    lastAddedCount: entry.lastAddedCount,
+    lastResponseCached: entry.lastResponseCached,
     seenNormalized: [...entry.seenNormalized],
     seenRaw: [...entry.seenRaw],
     createdAt: entry.createdAt,
@@ -55,25 +48,19 @@ export function serializeEntry(entry: SuggestionCacheEntry): PersistedSuggestion
   };
 }
 
-/** Implements deserialize entry. */
+/** Deserializes a persisted cache entry into the runtime shape. */
 export function deserializeEntry(value: PersistedSuggestionCacheEntryV1): SuggestionCacheEntry {
-  const thesaurusOptions = Array.isArray(value.thesaurusOptions) ? value.thesaurusOptions : [];
-  const aiOptions = Array.isArray(value.aiOptions) ? value.aiOptions : [];
+  const suggestions = Array.isArray(value.suggestions) ? value.suggestions : [];
   const createdAt = typeof value.createdAt === "number" ? value.createdAt : Date.now();
   const lastAccessedAt = typeof value.lastAccessedAt === "number" ? value.lastAccessedAt : createdAt;
 
   return {
-    thesaurusOptions,
-    aiOptions,
-    thesaurusInfo: value.thesaurusInfo,
-    thesaurusLastResponseCached: typeof value.thesaurusLastResponseCached === "boolean"
-      ? value.thesaurusLastResponseCached
-      : true,
-    lastAiPrompt: typeof value.lastAiPrompt === "string" ? value.lastAiPrompt : undefined,
-    lastAiModel: typeof value.lastAiModel === "string" ? value.lastAiModel : undefined,
-    aiLoadedCount: typeof value.aiLoadedCount === "number" ? value.aiLoadedCount : aiOptions.length,
-    aiLastAddedCount: typeof value.aiLastAddedCount === "number" ? value.aiLastAddedCount : 0,
-    aiLastResponseCached: typeof value.aiLastResponseCached === "boolean" ? value.aiLastResponseCached : true,
+    suggestions,
+    lastPrompt: typeof value.lastPrompt === "string" ? value.lastPrompt : undefined,
+    lastModel: typeof value.lastModel === "string" ? value.lastModel : undefined,
+    loadedCount: typeof value.loadedCount === "number" ? value.loadedCount : suggestions.length,
+    lastAddedCount: typeof value.lastAddedCount === "number" ? value.lastAddedCount : 0,
+    lastResponseCached: typeof value.lastResponseCached === "boolean" ? value.lastResponseCached : true,
     seenNormalized: new Set<string>(Array.isArray(value.seenNormalized) ? value.seenNormalized : []),
     seenRaw: Array.isArray(value.seenRaw) ? value.seenRaw : [],
     createdAt,
@@ -83,7 +70,7 @@ export function deserializeEntry(value: PersistedSuggestionCacheEntryV1): Sugges
   };
 }
 
-/** Implements prune expired entries. */
+/** Drops persisted entries whose last access time is outside the TTL window. */
 export function pruneExpiredEntries(
   entries: Map<SuggestionKey, SuggestionCacheEntry>,
   ttlMs: number,
@@ -103,7 +90,7 @@ export function pruneExpiredEntries(
   return pruned;
 }
 
-/** Loads persisted cache. */
+/** Loads persisted cache data from disk. */
 export function loadPersistedCache(
   filePath: string,
   ttlMs: number,
@@ -140,7 +127,7 @@ export function loadPersistedCache(
   }
 }
 
-/** Saves persisted cache. */
+/** Saves cache data to disk. */
 export async function savePersistedCache(
   filePath: string,
   entries: Map<SuggestionKey, SuggestionCacheEntry>
@@ -148,7 +135,7 @@ export async function savePersistedCache(
   const serializableEntries: PersistedCacheItemV1[] = [];
 
   for (const [key, entry] of entries.entries()) {
-    if (entry.thesaurusOptions.length === 0 && entry.aiOptions.length === 0) {
+    if (entry.suggestions.length === 0) {
       continue;
     }
     serializableEntries.push({
@@ -167,7 +154,7 @@ export async function savePersistedCache(
   await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-/** Implements delete persisted cache. */
+/** Deletes the persisted cache file. */
 export async function deletePersistedCache(filePath: string): Promise<void> {
   await fsp.rm(filePath, { force: true });
 }

@@ -43,11 +43,7 @@ export class PersistentCacheCoordinator {
 
     this.deps.cache.setEntries(persistedEntries);
     for (const [key, entry] of persistedEntries.entries()) {
-      const thesaurusState = settings.thesaurusEnabled
-        ? (entry.thesaurusOptions.length > 0 ? "ready" : "idle")
-        : "idle";
-      const aiState = entry.aiOptions.length > 0 ? "ready" : "idle";
-      this.deps.cache.setSourceState(key, "thesaurus", thesaurusState, entry.documentUri);
+      const aiState = entry.suggestions.length > 0 ? "ready" : "idle";
       this.deps.cache.setSourceState(key, "ai", aiState, entry.documentUri);
     }
 

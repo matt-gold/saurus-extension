@@ -1,2 +1,2 @@
 export { SaurusController } from "./saurus";
-export type { CompletionLookup } from "./saurus";
+export type { SuggestionActionLookup } from "../types";

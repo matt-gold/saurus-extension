@@ -1,11 +1,5 @@
 import * as vscode from "vscode";
 import { SaurusController } from "../app";
-import { disableAutoTriggerForWorkspace } from "../config";
-import { SuggestionSourceFilter } from "../types";
-import {
-  refreshSuggestWidget,
-  refreshSuggestWidgetStable
-} from "../ui/suggest";
 
 function moveSelectionToCommandTarget(
   editor: vscode.TextEditor,
@@ -24,11 +18,12 @@ function moveSelectionToCommandTarget(
   }
 }
 
-async function promptForDirection(): Promise<string | undefined> {
+async function promptForDirection(value?: string): Promise<string | undefined> {
   const direction = await vscode.window.showInputBox({
     title: "Saurus: Generate With Prompt",
     prompt: "Enter a short direction for this AI generation run.",
     placeHolder: "Example: more lyrical, keep meaning intact",
+    value,
     ignoreFocusOut: true
   });
   if (direction === undefined) {
@@ -44,12 +39,23 @@ async function promptForDirection(): Promise<string | undefined> {
   return trimmed;
 }
 
+async function reopenQuickFix(): Promise<void> {
+  await vscode.commands.executeCommand("editor.action.quickFix");
+}
+
+async function showQuickFixDuringGeneration(generationPromise: Promise<void>): Promise<void> {
+  await reopenQuickFix();
+  await generationPromise;
+  await reopenQuickFix();
+}
+
 /** Registers Saurus editor commands and hotkey handlers. */
 export function registerSaurusCommands(
   controller: SaurusController,
   subscriptions: vscode.Disposable[]
 ): void {
   const runRefreshWithOptionalDirection = async (
+    forceDifferent: boolean,
     promptDirection: string | undefined,
     uri?: string,
     line?: number,
@@ -63,70 +69,12 @@ export function registerSaurusCommands(
     moveSelectionToCommandTarget(editor, uri, line, character);
 
     const generationPromise = controller.generateForEditor(editor, {
-      forceDifferent: true,
+      forceDifferent,
       promptDirection,
       showNoPlaceholderWarning: true,
       userInitiated: true
     });
-    const key = controller.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
-    if (key) {
-      controller.setPreferRefreshSelectionForKey(key, true);
-    }
-
-    await refreshSuggestWidget({ repeat: 2 });
-    await generationPromise;
-    await refreshSuggestWidgetStable();
-  };
-
-  const runSourceFilteredGeneration = async (
-    sourceFilter: SuggestionSourceFilter,
-    uri?: string,
-    line?: number,
-    character?: number
-  ): Promise<void> => {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      return;
-    }
-
-    moveSelectionToCommandTarget(editor, uri, line, character);
-
-    const settings = controller.getSettings(editor.document);
-    if (!settings.enabled || !settings.languages.includes(editor.document.languageId)) {
-      return;
-    }
-
-    if (!editor.selection.isEmpty) {
-      const wrapped = await controller.wrapSelectionInPlaceholder(editor, settings);
-      if (!wrapped) {
-        return;
-      }
-    }
-
-    const lookup = controller.getCompletionLookup(editor.document, editor.selection.active);
-    if (!lookup) {
-      void vscode.window.showInformationMessage(
-        "Saurus: place the cursor inside a configured placeholder to use source-specific suggestions."
-      );
-      return;
-    }
-
-    controller.setSourceFilterForKey(lookup.key, sourceFilter);
-    controller.setPreferRefreshSelectionForKey(lookup.key, sourceFilter === "aiOnly");
-
-    const forceDifferent = sourceFilter === "aiOnly"
-      ? lookup.entry?.aiOptions.length === 0
-      : false;
-
-    const generationPromise = controller.generateForEditor(editor, {
-      forceDifferent,
-      sourceFilter,
-      showNoPlaceholderWarning: true,
-      userInitiated: true
-    });
-    await refreshSuggestWidget({ repeat: 2 });
-    await generationPromise;
-    await refreshSuggestWidget({ hard: true, repeat: 2 });
+    await showQuickFixDuringGeneration(generationPromise);
   };
 
   subscriptions.push(
@@ -141,14 +89,7 @@ export function registerSaurusCommands(
         showNoPlaceholderWarning: true,
         userInitiated: true
       });
-      const key = controller.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
-      if (key) {
-        controller.setPreferRefreshSelectionForKey(key, false);
-      }
-
-      await refreshSuggestWidget({ repeat: 2 });
-      await generationPromise;
-      await refreshSuggestWidget({ hard: true, repeat: 2 });
+      await showQuickFixDuringGeneration(generationPromise);
     })
   );
 
@@ -159,7 +100,32 @@ export function registerSaurusCommands(
         return;
       }
 
-      await controller.suggestForSelection(editor);
+      const settings = controller.getSettings(editor.document);
+      if (!settings.enabled || !settings.languages.includes(editor.document.languageId)) {
+        return;
+      }
+
+      if (editor.selection.isEmpty) {
+        const generationPromise = controller.generateForEditor(editor, {
+          forceDifferent: false,
+          showNoPlaceholderWarning: true,
+          userInitiated: true
+        });
+        await showQuickFixDuringGeneration(generationPromise);
+        return;
+      }
+
+      const wrapped = await controller.wrapSelectionInPlaceholder(editor, settings);
+      if (!wrapped) {
+        return;
+      }
+
+      const generationPromise = controller.generateForEditor(editor, {
+        forceDifferent: false,
+        showNoPlaceholderWarning: false,
+        userInitiated: true
+      });
+      await showQuickFixDuringGeneration(generationPromise);
     })
   );
 
@@ -171,43 +137,37 @@ export function registerSaurusCommands(
       }
 
       const initialSelection = new vscode.Selection(editor.selection.start, editor.selection.end);
-      const promptDirection = await promptForDirection();
-      if (promptDirection === undefined) {
-        return;
-      }
-
       const settings = controller.getSettings(editor.document);
       if (!settings.enabled || !settings.languages.includes(editor.document.languageId)) {
         return;
       }
 
+      const promptDirection = await promptForDirection();
+      if (promptDirection === undefined) {
+        return;
+      }
+
       if (initialSelection.isEmpty) {
-        await runRefreshWithOptionalDirection(promptDirection);
+        const updated = await controller.setPlaceholderPrompt(editor, settings, promptDirection);
+        if (!updated) {
+          return;
+        }
+        await runRefreshWithOptionalDirection(true, undefined);
         return;
       }
 
       editor.selection = new vscode.Selection(initialSelection.start, initialSelection.end);
-      const wrapped = await controller.wrapSelectionInPlaceholder(editor, settings);
+      const wrapped = await controller.wrapSelectionInPlaceholderWithPrompt(editor, settings, promptDirection);
       if (!wrapped) {
         return;
       }
 
-      const key = controller.getSuggestionKeyAtPosition(editor.document, editor.selection.active);
-      if (key) {
-        controller.setPreferRefreshSelectionForKey(key, true);
-      }
-
       const generationPromise = controller.generateForEditor(editor, {
         forceDifferent: true,
-        sourceFilter: "all",
-        promptDirection,
         showNoPlaceholderWarning: false,
         userInitiated: true
       });
-
-      await refreshSuggestWidget({ repeat: 2 });
-      await generationPromise;
-      await refreshSuggestWidget({ hard: true, repeat: 2 });
+      await showQuickFixDuringGeneration(generationPromise);
     })
   );
 
@@ -242,36 +202,31 @@ export function registerSaurusCommands(
 
   subscriptions.push(
     vscode.commands.registerCommand("saurus.refreshSuggestions", async (uri?: string, line?: number, character?: number) => {
-      await runRefreshWithOptionalDirection(undefined, uri, line, character);
+      await runRefreshWithOptionalDirection(true, undefined, uri, line, character);
     })
   );
 
   subscriptions.push(
     vscode.commands.registerCommand("saurus.refreshSuggestionsWithPrompt", async (uri?: string, line?: number, character?: number) => {
-      const promptDirection = await promptForDirection();
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        return;
+      }
+
+      moveSelectionToCommandTarget(editor, uri, line, character);
+      const settings = controller.getSettings(editor.document);
+      const initialPrompt = controller.getPlaceholderPromptAtPosition(editor.document, editor.selection.active);
+      const promptDirection = await promptForDirection(initialPrompt);
       if (promptDirection === undefined) {
         return;
       }
 
-      await runRefreshWithOptionalDirection(promptDirection, uri, line, character);
-    })
-  );
+      const updated = await controller.setPlaceholderPrompt(editor, settings, promptDirection);
+      if (!updated) {
+        return;
+      }
 
-  subscriptions.push(
-    vscode.commands.registerCommand("saurus.showAiOnlySuggestions", async (uri?: string, line?: number, character?: number) => {
-      await runSourceFilteredGeneration("aiOnly", uri, line, character);
-    })
-  );
-
-  subscriptions.push(
-    vscode.commands.registerCommand("saurus.showThesaurusOnlySuggestions", async (uri?: string, line?: number, character?: number) => {
-      await runSourceFilteredGeneration("thesaurusOnly", uri, line, character);
-    })
-  );
-
-  subscriptions.push(
-    vscode.commands.registerCommand("saurus.exitPlaceholderSuggestions", async (uri?: string, line?: number, character?: number) => {
-      await controller.exitPlaceholderSuggestions(uri, line, character);
+      await runRefreshWithOptionalDirection(true, undefined, uri, line, character);
     })
   );
 
@@ -285,14 +240,14 @@ export function registerSaurusCommands(
   );
 
   subscriptions.push(
-    vscode.commands.registerCommand("saurus.reopenSuggestions", async (uri?: string, line?: number, character?: number) => {
+    vscode.commands.registerCommand("saurus.reopenQuickFix", async (uri?: string, line?: number, character?: number) => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
         return;
       }
 
       moveSelectionToCommandTarget(editor, uri, line, character);
-      await refreshSuggestWidget({ hard: true, repeat: 1 });
+      await reopenQuickFix();
     })
   );
 
@@ -303,9 +258,14 @@ export function registerSaurusCommands(
   );
 
   subscriptions.push(
-    vscode.commands.registerCommand("saurus.disableAutoTriggerForWorkspace", async () => {
-      await disableAutoTriggerForWorkspace();
-      void vscode.window.showInformationMessage("Saurus: auto-trigger disabled for this workspace.");
+    vscode.commands.registerCommand("saurus.removeAllPlaceholderDelimiters", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        return;
+      }
+
+      await controller.removeAllPlaceholderDelimiters(editor);
     })
   );
+
 }

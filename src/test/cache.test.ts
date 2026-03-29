@@ -2,38 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SuggestionCache } from "../state";
 
+function buildEntry(documentUri: string, suggestions: string[] = []): Parameters<SuggestionCache["setEntry"]>[1] {
+  return {
+    suggestions,
+    loadedCount: suggestions.length,
+    lastAddedCount: suggestions.length,
+    lastResponseCached: suggestions.length === 0,
+    seenNormalized: new Set<string>(),
+    seenRaw: [],
+    createdAt: Date.now(),
+    documentVersion: 1,
+    documentUri,
+    lastAccessedAt: Date.now()
+  };
+}
+
 test("clears entries by document uri", () => {
   const cache = new SuggestionCache();
 
-  cache.setEntry("file://a::1", {
-    thesaurusOptions: ["one"],
-    aiOptions: [],
-    thesaurusLastResponseCached: true,
-    aiLoadedCount: 0,
-    aiLastAddedCount: 0,
-    aiLastResponseCached: true,
-    seenNormalized: new Set<string>(),
-    seenRaw: [],
-    createdAt: Date.now(),
-    documentVersion: 1,
-    documentUri: "file://a",
-    lastAccessedAt: Date.now()
-  });
-
-  cache.setEntry("file://b::1", {
-    thesaurusOptions: ["two"],
-    aiOptions: [],
-    thesaurusLastResponseCached: true,
-    aiLoadedCount: 0,
-    aiLastAddedCount: 0,
-    aiLastResponseCached: true,
-    seenNormalized: new Set<string>(),
-    seenRaw: [],
-    createdAt: Date.now(),
-    documentVersion: 1,
-    documentUri: "file://b",
-    lastAccessedAt: Date.now()
-  });
+  cache.setEntry("file://a::1", buildEntry("file://a", ["one"]));
+  cache.setEntry("file://b::1", buildEntry("file://b", ["two"]));
 
   cache.clearDocument("file://a");
 
@@ -43,20 +31,7 @@ test("clears entries by document uri", () => {
 
 test("clearAll removes all entries", () => {
   const cache = new SuggestionCache();
-  cache.setEntry("file://a::1", {
-    thesaurusOptions: ["one"],
-    aiOptions: ["two"],
-    thesaurusLastResponseCached: false,
-    aiLoadedCount: 1,
-    aiLastAddedCount: 1,
-    aiLastResponseCached: false,
-    seenNormalized: new Set<string>(),
-    seenRaw: [],
-    createdAt: Date.now(),
-    documentVersion: 1,
-    documentUri: "file://a",
-    lastAccessedAt: Date.now()
-  });
+  cache.setEntry("file://a::1", buildEntry("file://a", ["two"]));
 
   cache.clearAll();
   assert.equal(cache.hasEntry("file://a::1"), false);

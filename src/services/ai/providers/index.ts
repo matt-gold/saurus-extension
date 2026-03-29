@@ -6,11 +6,11 @@ import type { AiProviderDefinition } from "./types";
 export type {
   AiProviderBackgroundCheckOptions,
   AiProviderDefinition,
-  AiProviderGenerateRequest,
   AiProviderModelDiscoveryOptions,
   AiProviderModelDiscoveryResult,
   AiProviderPreset,
-  AiSuggestionProvider
+  SuggestionProvider,
+  SuggestionProviderGenerateRequest
 } from "./types";
 export {
   CLAUDE_PROVIDER_DEFINITION,

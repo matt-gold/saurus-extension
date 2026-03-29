@@ -12,13 +12,9 @@ export {
   toPromptVariables
 } from "./promptTemplate";
 export type { PromptTemplateVariables } from "./promptTemplate";
-export { extractThesaurusLookupTerm } from "./thesaurusLookupTerm";
+export { parsePlaceholderContent } from "../placeholder";
 export {
-  buildAiSemanticCacheKey,
-  buildThesaurusSemanticCacheKey,
+  buildSuggestionSemanticCacheKey,
   normalizeAiAdjacentContext
 } from "./suggestionKeys";
-export type {
-  AiSemanticCacheKeyInput,
-  ThesaurusSemanticCacheKeyInput
-} from "./suggestionKeys";
+export type { SuggestionSemanticCacheKeyInput } from "./suggestionKeys";

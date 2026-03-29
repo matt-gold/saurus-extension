@@ -1,62 +1,33 @@
 import * as vscode from "vscode";
 import { ProblemFinderService } from "./internal/ProblemFinderService";
-import { PersistentCacheCoordinator } from "./internal/PersistentCacheCoordinator";
 import { PlaceholderEditActions } from "./internal/PlaceholderEditActions";
 import {
-  AiSemanticCacheEntry,
   GenerateForEditorOptions,
-  SuggestionGenerationService,
-  ThesaurusSemanticCacheEntry
+  SuggestionGenerationService
 } from "./internal/SuggestionGenerationService";
+import { PlaceholderSessionFactory } from "./internal/session";
+import { SuggestionRequestBuilder } from "./internal/request";
+import { SuggestionResultStore } from "./internal/store";
 import { getSettings } from "../../config";
 import {
-  addSuggestionsToSeen,
-  buildAiSemanticCacheKey,
-  buildThesaurusSemanticCacheKey,
-  extractContextFromDocument,
-  hashText,
-  normalizeAiAdjacentContext
-} from "../../core/suggestions";
-import { findPlaceholderAtPosition } from "../../core/placeholder";
-import { getAiProviderLabel } from "../../services/ai";
-import { SuggestionCache } from "../../state";
-import {
-  PlaceholderMatch,
   SaurusSettings,
-  SuggestionSourceFilter,
-  SourceGenerationStates,
-  SuggestionCacheEntry,
-  SuggestionKeyData,
+  SuggestionActionLookup
 } from "../../types";
-import { refreshSuggestWidget } from "../../ui/suggest";
-
-/** Describes completion-provider lookup data for an active placeholder session. */
-export type CompletionLookup = {
-  key: string;
-  match: PlaceholderMatch;
-  entry?: SuggestionCacheEntry;
-  sourceStates: SourceGenerationStates;
-  sourceFilter: SuggestionSourceFilter;
-  aiAutoRun: boolean;
-  aiProviderName: string;
-  aiConfiguredModel?: string;
-  thesaurusPrefix: string;
-  aiPrefix: string;
-  aiActiveAction?: "refresh" | "refreshWithPrompt";
-  thesaurusProvider: SaurusSettings["thesaurusProvider"];
-  preferRefreshSelection: boolean;
-};
 
 type SaurusControllerFactories = {
   createProblemFinderService: (
     deps: ConstructorParameters<typeof ProblemFinderService>[0]
   ) => ProblemFinderService;
-  createPersistentCacheCoordinator: (
-    deps: ConstructorParameters<typeof PersistentCacheCoordinator>[0]
-  ) => PersistentCacheCoordinator;
   createPlaceholderEditActions: (
     deps: ConstructorParameters<typeof PlaceholderEditActions>[0]
   ) => PlaceholderEditActions;
+  createPlaceholderSessionFactory: (
+    deps: ConstructorParameters<typeof PlaceholderSessionFactory>[0]
+  ) => PlaceholderSessionFactory;
+  createSuggestionRequestBuilder: () => SuggestionRequestBuilder;
+  createSuggestionResultStore: (
+    deps: ConstructorParameters<typeof SuggestionResultStore>[0]
+  ) => SuggestionResultStore;
   createSuggestionGenerationService: (
     deps: ConstructorParameters<typeof SuggestionGenerationService>[0]
   ) => SuggestionGenerationService;
@@ -72,66 +43,59 @@ type SaurusControllerConstructionOptions = {
 
 /** Coordinates Saurus application behavior and VS Code-facing workflows. */
 export class SaurusController implements vscode.Disposable {
-  private readonly cache = new SuggestionCache();
-  private readonly thesaurusSemanticCache = new Map<string, ThesaurusSemanticCacheEntry>();
-  private readonly aiSemanticCache = new Map<string, AiSemanticCacheEntry>();
-  private readonly completionItemsChangedEmitter = new vscode.EventEmitter<void>();
-  private readonly preferRefreshSelectionKeys = new Set<string>();
-  private readonly sourceFilterByKey = new Map<string, SuggestionSourceFilter>();
-  private readonly aiActionByKey = new Map<string, "refresh" | "refreshWithPrompt">();
+  private readonly refreshModeBySessionKey = new Map<string, "refresh" | "refreshWithPrompt">();
   private readonly problemFinderService: ProblemFinderService;
-  private readonly persistentCacheCoordinator: PersistentCacheCoordinator;
   private readonly placeholderEditActions: PlaceholderEditActions;
+  private readonly placeholderSessionFactory: PlaceholderSessionFactory;
+  private readonly suggestionRequestBuilder: SuggestionRequestBuilder;
+  private readonly suggestionResultStore: SuggestionResultStore;
   private readonly suggestionGenerationService: SuggestionGenerationService;
-
-  public readonly onDidChangeCompletionItems = this.completionItemsChangedEmitter.event;
 
   public constructor(options: SaurusControllerConstructionOptions) {
     this.problemFinderService = options.factories.createProblemFinderService({
       problemFinderSchemaPath: options.problemFinderSchemaPath,
       getSettings: (document) => this.getSettings(document)
     });
-    this.persistentCacheCoordinator = options.factories.createPersistentCacheCoordinator({
-      cache: this.cache,
+    this.suggestionResultStore = options.factories.createSuggestionResultStore({
       persistentCachePath: options.persistentCachePath,
       getSettings: () => this.getSettings(),
-      notifyCompletionItemsChanged: () => this.notifyCompletionItemsChanged()
+      notifyChange: () => this.notifySuggestionActionsChanged()
     });
+    this.placeholderSessionFactory = options.factories.createPlaceholderSessionFactory({
+      getSettings: (document) => this.getSettings(document),
+      store: this.suggestionResultStore
+    });
+    this.suggestionRequestBuilder = options.factories.createSuggestionRequestBuilder();
     this.placeholderEditActions = options.factories.createPlaceholderEditActions({
       getSettings: (document) => this.getSettings(document),
       getSuggestionKeyAtPosition: (document, position) => this.getSuggestionKeyAtPosition(document, position),
-      clearPreferRefreshSelectionForKey: (key) => this.preferRefreshSelectionKeys.delete(key),
-      clearSourceFilterForKey: (key) => this.sourceFilterByKey.delete(key),
-      clearAiActionForKey: (key) => this.aiActionByKey.delete(key)
+      clearAiActionForKey: (key) => this.refreshModeBySessionKey.delete(key)
     });
     this.suggestionGenerationService = options.factories.createSuggestionGenerationService({
       extensionContext: options.extensionContext,
       schemaPath: options.schemaPath,
-      cache: this.cache,
-      thesaurusSemanticCache: this.thesaurusSemanticCache,
-      aiSemanticCache: this.aiSemanticCache,
-      sourceFilterByKey: this.sourceFilterByKey,
-      aiActionByKey: this.aiActionByKey,
       getSettings: (document) => this.getSettings(document),
-      buildSuggestionKeyData: (document, match, settings) => this.buildSuggestionKeyData(document, match, settings),
-      hydrateUiEntryFromSemanticCaches: (suggestionKey, keyData, document, existingEntry) =>
-        this.hydrateUiEntryFromSemanticCaches(suggestionKey, keyData, document, existingEntry),
-      updateSourceStatesForEntry: (key, entry, settings, documentUri) =>
-        this.updateSourceStatesForEntry(key, entry, settings, documentUri),
-      mapActivationModeToSourceFilter: (mode) => this.mapActivationModeToSourceFilter(mode),
-      schedulePersistentCacheSave: () => this.schedulePersistentCacheSave(),
-      notifyCompletionItemsChanged: () => this.notifyCompletionItemsChanged()
+      sessionFactory: this.placeholderSessionFactory,
+      requestBuilder: this.suggestionRequestBuilder,
+      resultStore: this.suggestionResultStore,
+      getRefreshMode: (key) => this.refreshModeBySessionKey.get(key),
+      setRefreshMode: (key, mode) => {
+        if (mode) {
+          this.refreshModeBySessionKey.set(key, mode);
+        } else {
+          this.refreshModeBySessionKey.delete(key);
+        }
+      }
     });
   }
 
   public initialize(): void {
-    this.hydratePersistentCache();
+    this.suggestionResultStore.initialize();
   }
 
   public dispose(): void {
     this.problemFinderService.dispose();
-    this.persistentCacheCoordinator.dispose();
-    this.completionItemsChangedEmitter.dispose();
+    this.suggestionResultStore.dispose();
   }
 
   public getSettings(document?: vscode.TextDocument): SaurusSettings {
@@ -143,117 +107,70 @@ export class SaurusController implements vscode.Disposable {
     return settings.enabled && settings.languages.includes(document.languageId);
   }
 
-  public shouldAutoTrigger(document: vscode.TextDocument): boolean {
-    const settings = this.getSettings(document);
-    return settings.enabled && settings.autoTriggerOnCursorEnter && settings.languages.includes(document.languageId);
+  public getSessionAtPosition(document: vscode.TextDocument, position: vscode.Position) {
+    return this.placeholderSessionFactory.getSession(document, position);
   }
 
-  public getAutoDebounceMs(document: vscode.TextDocument): number {
-    return this.getSettings(document).autoTriggerDebounceMs;
-  }
-
-  public getActivationSourceFilter(document: vscode.TextDocument): SuggestionSourceFilter {
-    return this.mapActivationModeToSourceFilter(this.getSettings(document).activationModeOnEnter);
-  }
-
-  public setSourceFilterForKey(key: string, sourceFilter: SuggestionSourceFilter): void {
-    this.sourceFilterByKey.set(key, sourceFilter);
-  }
-
-  public getCompletionLookup(document: vscode.TextDocument, position: vscode.Position): CompletionLookup | undefined {
-    const settings = this.getSettings(document);
-    if (!settings.enabled || !settings.languages.includes(document.languageId)) {
+  public getSuggestionActionLookup(document: vscode.TextDocument, position: vscode.Position): SuggestionActionLookup | undefined {
+    const session = this.getSessionAtPosition(document, position);
+    if (!session) {
       return undefined;
     }
-
-    const match = findPlaceholderAtPosition(document, position, settings.delimiters);
-    if (!match) {
-      return undefined;
-    }
-
-    const keyData = this.buildSuggestionKeyData(document, match, settings);
-    const cachedEntry = this.hydrateUiEntryFromSemanticCaches(
-      keyData.key,
-      keyData,
-      document,
-      this.cache.getEntry(keyData.key)
-    );
-    if (cachedEntry) {
-      this.schedulePersistentCacheSave();
-    }
-
-    const entry = cachedEntry
-      ? {
-        ...cachedEntry,
-        thesaurusOptions: settings.thesaurusEnabled ? cachedEntry.thesaurusOptions : []
-      }
-      : undefined;
 
     return {
-      key: keyData.key,
-      match,
-      entry,
-      sourceStates: this.cache.getSourceStates(keyData.key),
-      sourceFilter: this.sourceFilterByKey.get(keyData.key) ?? this.getActivationSourceFilter(document),
-      aiAutoRun: settings.aiAutoRun,
-      aiProviderName: getAiProviderLabel(settings.aiProvider),
-      aiConfiguredModel: settings.aiModel,
-      thesaurusPrefix: settings.thesaurusPrefix,
-      aiPrefix: settings.aiPrefix,
-      aiActiveAction: this.aiActionByKey.get(keyData.key),
-      thesaurusProvider: settings.thesaurusProvider,
-      preferRefreshSelection: this.preferRefreshSelectionKeys.has(keyData.key)
+      key: session.key,
+      match: session.match,
+      entry: session.entry,
+      sourceStates: session.sourceStates,
+      aiProviderName: session.providerLabel,
+      aiConfiguredModel: session.configuredModel,
+      isGenerating: session.isGenerating,
+      hasSuggestions: session.hasSuggestions
     };
   }
 
-  public getSuggestionKeyAtPosition(document: vscode.TextDocument, position: vscode.Position): string | undefined {
-    const settings = this.getSettings(document);
-    if (!settings.enabled || !settings.languages.includes(document.languageId)) {
-      return undefined;
-    }
-
-    const match = findPlaceholderAtPosition(document, position, settings.delimiters);
-    if (!match) {
-      return undefined;
-    }
-
-    return this.buildSuggestionKeyData(document, match, settings).key;
-  }
-
-  public hasCachedEntry(key: string): boolean {
-    return this.cache.hasEntry(key);
-  }
-
-  public setPreferRefreshSelectionForKey(key: string, prefer: boolean): void {
-    if (prefer) {
-      this.preferRefreshSelectionKeys.add(key);
+  public maybeAutoGenerateSuggestions(document: vscode.TextDocument, position: vscode.Position): void {
+    const session = this.getSessionAtPosition(document, position);
+    if (!session || session.hasSuggestions || session.isGenerating || this.suggestionResultStore.hasInFlight(session.key)) {
       return;
     }
 
-    this.preferRefreshSelectionKeys.delete(key);
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.toString() !== document.uri.toString()) {
+      return;
+    }
+
+    const target = new vscode.Selection(position, position);
+    editor.selection = target;
+    void this.generateForEditor(editor, {
+      forceDifferent: false,
+      showNoPlaceholderWarning: false,
+      userInitiated: true
+    }).finally(() => {
+      void this.reopenQuickFix();
+    });
+  }
+
+  public getSuggestionKeyAtPosition(document: vscode.TextDocument, position: vscode.Position): string | undefined {
+    return this.getSessionAtPosition(document, position)?.key;
+  }
+
+  public getPlaceholderPromptAtPosition(document: vscode.TextDocument, position: vscode.Position): string | undefined {
+    return this.getSessionAtPosition(document, position)?.parsedContent.directionText || undefined;
+  }
+
+  public hasCachedEntry(key: string): boolean {
+    return this.suggestionResultStore.hasEntry(key);
   }
 
   public invalidateDocument(document: vscode.TextDocument): void {
     const documentUri = document.uri.toString();
-    this.cache.clearDocument(documentUri);
-    for (const key of this.preferRefreshSelectionKeys) {
+    this.suggestionResultStore.clearDocument(documentUri);
+    for (const key of this.refreshModeBySessionKey.keys()) {
       if (key.startsWith(`${documentUri}::`)) {
-        this.preferRefreshSelectionKeys.delete(key);
+        this.refreshModeBySessionKey.delete(key);
       }
     }
-    for (const key of this.sourceFilterByKey.keys()) {
-      if (key.startsWith(`${documentUri}::`)) {
-        this.sourceFilterByKey.delete(key);
-      }
-    }
-    for (const key of this.aiActionByKey.keys()) {
-      if (key.startsWith(`${documentUri}::`)) {
-        this.aiActionByKey.delete(key);
-      }
-    }
-
-    this.schedulePersistentCacheSave();
-    this.notifyCompletionItemsChanged();
   }
 
   public async generateForEditor(editor: vscode.TextEditor, options: GenerateForEditorOptions): Promise<void> {
@@ -271,11 +188,9 @@ export class SaurusController implements vscode.Disposable {
     if (selection.isEmpty) {
       await this.generateForEditor(editor, {
         forceDifferent: false,
-        sourceFilter: "all",
         showNoPlaceholderWarning: true,
         userInitiated: true
       });
-      await refreshSuggestWidget({ hard: true, repeat: 2 });
       return;
     }
 
@@ -286,11 +201,9 @@ export class SaurusController implements vscode.Disposable {
 
     await this.generateForEditor(editor, {
       forceDifferent: false,
-      sourceFilter: "all",
       showNoPlaceholderWarning: false,
       userInitiated: true
     });
-    await refreshSuggestWidget({ hard: true, repeat: 2 });
   }
 
   public async applySuggestion(
@@ -303,20 +216,30 @@ export class SaurusController implements vscode.Disposable {
   }
 
   public async clearPersistentCache(): Promise<void> {
-    this.cache.clearAll();
-    this.preferRefreshSelectionKeys.clear();
-    this.sourceFilterByKey.clear();
-    this.aiActionByKey.clear();
-    this.persistentCacheCoordinator.cancelPendingSave();
+    this.suggestionResultStore.clearAll();
+    this.refreshModeBySessionKey.clear();
 
     try {
-      await this.persistentCacheCoordinator.deletePersistedCacheFile();
-      this.notifyCompletionItemsChanged();
+      await this.suggestionResultStore.deletePersistedCacheFile();
+      this.notifySuggestionActionsChanged();
       void vscode.window.showInformationMessage("Saurus: persistent cache cleared.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       void vscode.window.showErrorMessage(`Saurus: failed to clear persistent cache. ${message}`);
     }
+  }
+
+  public async removeAllPlaceholderDelimiters(editor: vscode.TextEditor): Promise<void> {
+    const settings = this.getSettings(editor.document);
+    const removedCount = await this.placeholderEditActions.removeAllPlaceholderDelimiters(editor, settings);
+    if (removedCount === 0) {
+      void vscode.window.showInformationMessage("Saurus: no placeholders found in this file.");
+      return;
+    }
+
+    void vscode.window.showInformationMessage(
+      `Saurus: removed delimiters from ${removedCount} placeholder${removedCount === 1 ? "" : "s"}.`
+    );
   }
 
   public async findProblems(editor: vscode.TextEditor): Promise<void> {
@@ -354,191 +277,31 @@ export class SaurusController implements vscode.Disposable {
     this.problemFinderService.clearProblemsForDocument(document);
   }
 
-  private notifyCompletionItemsChanged(): void {
-    this.completionItemsChangedEmitter.fire();
-  }
-
-  private hydrateUiEntryFromSemanticCaches(
-    suggestionKey: string,
-    keyData: SuggestionKeyData,
-    document: vscode.TextDocument,
-    existingEntry?: SuggestionCacheEntry
-  ): SuggestionCacheEntry | undefined {
-    const thesaurusSemantic = this.thesaurusSemanticCache.get(keyData.thesaurusCacheKey);
-    const aiSemantic = this.aiSemanticCache.get(keyData.aiCacheKey);
-
-    if (!existingEntry && !thesaurusSemantic && !aiSemantic) {
-      return undefined;
-    }
-
-    let nextEntry = existingEntry
-      ? {
-        ...existingEntry,
-        thesaurusOptions: [...existingEntry.thesaurusOptions],
-        aiOptions: [...existingEntry.aiOptions],
-        seenNormalized: new Set<string>(existingEntry.seenNormalized),
-        seenRaw: [...existingEntry.seenRaw]
-      }
-      : this.createEmptyUiCacheEntry(document);
-
-    let changed = !existingEntry;
-
-    if (thesaurusSemantic && nextEntry.thesaurusOptions.length === 0) {
-      nextEntry = {
-        ...nextEntry,
-        thesaurusOptions: [...thesaurusSemantic.options],
-        thesaurusInfo: thesaurusSemantic.info,
-        thesaurusLastResponseCached: true
-      };
-      changed = true;
-    }
-
-    if (aiSemantic && nextEntry.aiOptions.length === 0) {
-      nextEntry = {
-        ...nextEntry,
-        aiOptions: [...aiSemantic.options],
-        lastAiPrompt: aiSemantic.lastPrompt,
-        lastAiModel: aiSemantic.lastModel,
-        aiLoadedCount: aiSemantic.options.length,
-        aiLastAddedCount: 0,
-        aiLastResponseCached: true
-      };
-      changed = true;
-    }
-
-    if (!changed) {
-      return existingEntry;
-    }
-
-    const seenNormalized = new Set<string>();
-    const seenRaw: string[] = [];
-    addSuggestionsToSeen(nextEntry.thesaurusOptions, seenNormalized, seenRaw);
-    addSuggestionsToSeen(nextEntry.aiOptions, seenNormalized, seenRaw);
-    nextEntry = {
-      ...nextEntry,
-      seenNormalized,
-      seenRaw,
-      lastAccessedAt: Date.now()
-    };
-
-    this.cache.setEntry(suggestionKey, nextEntry);
-    return nextEntry;
-  }
-
-  private createEmptyUiCacheEntry(document: vscode.TextDocument): SuggestionCacheEntry {
-    const now = Date.now();
-    return {
-      thesaurusOptions: [],
-      aiOptions: [],
-      thesaurusLastResponseCached: true,
-      aiLoadedCount: 0,
-      aiLastAddedCount: 0,
-      aiLastResponseCached: true,
-      seenNormalized: new Set<string>(),
-      seenRaw: [],
-      createdAt: now,
-      documentVersion: document.version,
-      documentUri: document.uri.toString(),
-      lastAccessedAt: now
-    };
-  }
-
-  public async exitPlaceholderSuggestions(uri?: string, line?: number, character?: number): Promise<void> {
-    await this.placeholderEditActions.exitPlaceholderSuggestions(uri, line, character);
+  public reopenQuickFix(): Thenable<unknown> {
+    return vscode.commands.executeCommand("editor.action.quickFix");
   }
 
   public async wrapSelectionInPlaceholder(editor: vscode.TextEditor, settings: SaurusSettings): Promise<boolean> {
     return this.placeholderEditActions.wrapSelectionInPlaceholder(editor, settings);
   }
 
-  private hydratePersistentCache(): void {
-    this.persistentCacheCoordinator.hydrate();
-  }
-
-  private schedulePersistentCacheSave(): void {
-    this.persistentCacheCoordinator.scheduleSave();
-  }
-
-  private buildSuggestionKeyData(
-    document: vscode.TextDocument,
-    match: PlaceholderMatch,
-    settings: SaurusSettings
-  ): SuggestionKeyData {
-    const context = extractContextFromDocument(
-      document,
-      match.fullRange,
-      settings.contextCharsBefore,
-      settings.contextCharsAfter
-    );
-
-    const promptTemplateHash = hashText(settings.promptTemplate);
-    const aiPathForKey = settings.aiProvider === "copilotChat" ? "" : settings.aiPath;
-    const aiContextBefore = normalizeAiAdjacentContext(context.contextBefore, settings.delimiters);
-    const aiContextAfter = normalizeAiAdjacentContext(context.contextAfter, settings.delimiters);
-
-    const payload = JSON.stringify({
-      uri: document.uri.toString(),
-      line: match.fullRange.start.line,
-      startCharacter: match.fullRange.start.character,
-      endCharacter: match.fullRange.end.character,
-      placeholder: match.rawInnerText,
-      contextBefore: context.contextBefore,
-      contextAfter: context.contextAfter,
-      open: settings.delimiters.open,
-      close: settings.delimiters.close,
-      aiProvider: settings.aiProvider,
-      aiPath: aiPathForKey,
-      aiModel: settings.aiModel ?? "",
-      aiReasoningEffort: settings.aiReasoningEffort,
-      promptTemplateHash
-    });
-
-    return {
-      key: `${document.uri.toString()}::${hashText(payload)}`,
-      aiCacheKey: buildAiSemanticCacheKey({
-        placeholder: match.rawInnerText,
-        contextBefore: aiContextBefore,
-        contextAfter: aiContextAfter,
-        aiProvider: settings.aiProvider,
-        aiPath: aiPathForKey,
-        aiModel: settings.aiModel,
-        aiReasoningEffort: settings.aiReasoningEffort,
-        promptTemplateHash
-      }),
-      thesaurusCacheKey: buildThesaurusSemanticCacheKey({
-        provider: settings.thesaurusProvider,
-        rawPlaceholder: match.rawInnerText
-      }),
-      contextBefore: aiContextBefore,
-      contextAfter: aiContextAfter,
-      promptTemplateHash
-    };
-  }
-
-  private updateSourceStatesForEntry(
-    key: string,
-    entry: SuggestionCacheEntry,
+  public async wrapSelectionInPlaceholderWithPrompt(
+    editor: vscode.TextEditor,
     settings: SaurusSettings,
-    documentUri: string
-  ): void {
-    const thesaurusState = settings.thesaurusEnabled
-      ? (entry.thesaurusOptions.length > 0 ? "ready" : "idle")
-      : "idle";
-    const aiState = entry.aiOptions.length > 0 ? "ready" : "idle";
-
-    this.cache.setSourceState(key, "thesaurus", thesaurusState, documentUri);
-    this.cache.setSourceState(key, "ai", aiState, documentUri);
-    this.notifyCompletionItemsChanged();
+    direction?: string
+  ): Promise<boolean> {
+    return this.placeholderEditActions.wrapSelectionInPlaceholderWithPrompt(editor, settings, direction);
   }
 
-  private mapActivationModeToSourceFilter(mode: SaurusSettings["activationModeOnEnter"]): SuggestionSourceFilter {
-    if (mode === "ai") {
-      return "aiOnly";
-    }
-    if (mode === "thesaurus") {
-      return "thesaurusOnly";
-    }
-    return "all";
+  public async setPlaceholderPrompt(
+    editor: vscode.TextEditor,
+    settings: SaurusSettings,
+    direction: string
+  ): Promise<boolean> {
+    return this.placeholderEditActions.setPlaceholderPrompt(editor, settings, direction);
   }
 
+  private notifySuggestionActionsChanged(): void {
+    // Quick Fix is pull-based; callers reopen it explicitly after state-changing actions.
+  }
 }
