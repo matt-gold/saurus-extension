@@ -2,12 +2,10 @@ import {
   GenerationState,
   SourceGenerationStates,
   SuggestionCacheEntry,
-  SuggestionKey,
-  SuggestionSource
+  SuggestionKey
 } from "../types";
 
 const DEFAULT_SOURCE_STATES: SourceGenerationStates = {
-  thesaurus: "idle",
   ai: "idle"
 };
 
@@ -54,13 +52,13 @@ export class SuggestionCache {
     return this.sourceStates.get(key) ?? DEFAULT_SOURCE_STATES;
   }
 
-  public getSourceState(key: SuggestionKey, source: SuggestionSource): GenerationState {
+  public getSourceState(key: SuggestionKey, source: keyof SourceGenerationStates): GenerationState {
     return this.getSourceStates(key)[source];
   }
 
   public setSourceState(
     key: SuggestionKey,
-    source: SuggestionSource,
+    source: keyof SourceGenerationStates,
     state: GenerationState,
     documentUri?: string
   ): void {

@@ -1,8 +1,8 @@
 {
   "name": "saurus-extension",
   "displayName": "Saurus",
-  "description": "A thesaurus-first, AI-second writing tool designed to keep you in the flow.",
-  "version": "0.5.5",
+  "description": "An AI-assisted writing tool designed to keep you in the flow.",
+  "version": "0.5.4",
   "icon": "assets/icon.png",
   "publisher": "matt-gold",
   "license": "Apache-2.0",
@@ -21,16 +21,12 @@
     "onCommand:saurus.suggestForSelection",
     "onCommand:saurus.suggestForSelectionWithPrompt",
     "onCommand:saurus.findProblems",
-    "onCommand:saurus.configureThesaurusProvider",
     "onCommand:saurus.configureAiProvider",
     "onCommand:saurus.configureAiModel",
     "onCommand:saurus.refreshSuggestions",
     "onCommand:saurus.refreshSuggestionsWithPrompt",
-    "onCommand:saurus.showAiOnlySuggestions",
-    "onCommand:saurus.showThesaurusOnlySuggestions",
-    "onCommand:saurus.exitPlaceholderSuggestions",
     "onCommand:saurus.clearPersistentCache",
-    "onCommand:saurus.disableAutoTriggerForWorkspace",
+    "onCommand:saurus.removeAllPlaceholderDelimiters",
     "onLanguage:markdown",
     "onLanguage:plaintext"
   ],
@@ -54,10 +50,6 @@
         "title": "Saurus: Diagnose Writing Problems"
       },
       {
-        "command": "saurus.configureThesaurusProvider",
-        "title": "Saurus: Configure Thesaurus Provider"
-      },
-      {
         "command": "saurus.configureAiProvider",
         "title": "Saurus: Configure AI Provider"
       },
@@ -74,24 +66,12 @@
         "title": "Saurus: Generate With Prompt"
       },
       {
-        "command": "saurus.showAiOnlySuggestions",
-        "title": "Saurus: Show AI Suggestions Only"
-      },
-      {
-        "command": "saurus.showThesaurusOnlySuggestions",
-        "title": "Saurus: Show Thesaurus Suggestions Only"
-      },
-      {
-        "command": "saurus.exitPlaceholderSuggestions",
-        "title": "Saurus: Exit Placeholder Suggestions"
-      },
-      {
         "command": "saurus.clearPersistentCache",
         "title": "Saurus: Clear Persistent Cache"
       },
       {
-        "command": "saurus.disableAutoTriggerForWorkspace",
-        "title": "Saurus: Disable Auto Trigger (Workspace)"
+        "command": "saurus.removeAllPlaceholderDelimiters",
+        "title": "Saurus: Remove All Placeholder Delimiters"
       }
     ],
     "configuration": {
@@ -122,37 +102,6 @@
           "type": "string",
           "default": "}}",
           "description": "Closing placeholder delimiter."
-        },
-        "saurus.thesaurus.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable optional dictionary thesaurus suggestions."
-        },
-        "saurus.thesaurus.provider": {
-          "type": "string",
-          "default": "merriamWebster",
-          "enum": [
-            "merriamWebster"
-          ],
-          "description": "Thesaurus provider implementation."
-        },
-        "saurus.thesaurus.timeoutMs": {
-          "type": "number",
-          "default": 10000,
-          "minimum": 500,
-          "description": "Timeout for thesaurus requests in milliseconds."
-        },
-        "saurus.thesaurus.maxSuggestions": {
-          "type": "number",
-          "default": 20,
-          "minimum": 1,
-          "maximum": 50,
-          "description": "Maximum number of thesaurus suggestions to keep per placeholder."
-        },
-        "saurus.ai.autoGenerateOnOpen": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically generate AI suggestions when opening a placeholder. When false, AI runs only via 'Generate/Get more AI options'."
         },
         "saurus.ai.provider": {
           "type": "string",
@@ -192,16 +141,6 @@
           "default": 60000,
           "minimum": 1000,
           "description": "Timeout for AI requests in milliseconds."
-        },
-        "saurus.menu.thesaurusPrefix": {
-          "type": "string",
-          "default": "📖",
-          "description": "Prefix string shown before thesaurus entries."
-        },
-        "saurus.menu.aiPrefix": {
-          "type": "string",
-          "default": "✨",
-          "description": "Prefix string shown before AI entries."
         },
         "saurus.cache.persistAcrossReload": {
           "type": "boolean",
@@ -243,18 +182,8 @@
         "saurus.prompt.template": {
           "type": "string",
           "scope": "window",
-          "default": "You are helping with literary prose revision. Provide ${suggestionCount} replacement options for the placeholder.\n\nReturn valid JSON only with this shape: {\\\"suggestions\\\":[\\\"...\\\"]}.\nKeep options concise and stylistically consistent with nearby prose.\nPrefer single-word replacements whenever they preserve meaning and tone.\nFor multi-word placeholders, include multiple single-word options (ideally at least half of the list).\nUse multi-word replacements only when a single word would lose essential meaning or voice.\nDo not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).\n\nPlaceholder text:\n${placeholder}\n\nContext before:\n${contextBefore}\n\nContext after:\n${contextAfter}\n\nAvoid suggestions:\n${avoidSuggestions}\n\nAdditional direction (optional):\n${direction}\n",
+          "default": "You are helping with literary prose revision. Provide ${suggestionCount} replacement options for the placeholder.\n\nReturn valid JSON only with this shape: {\\\"suggestions\\\":[\\\"...\\\"]}.\nKeep options concise and stylistically consistent with nearby prose.\nDo not return options semantically identical to the avoid list (at minimum avoid exact normalized matches).\n\nPlaceholder text:\n${placeholder}\n\nContext before:\n${contextBefore}\n\nContext after:\n${contextAfter}\n\nAvoid suggestions:\n${avoidSuggestions}\n\nAdditional direction (optional):\n${direction}\n",
           "description": "Prompt template used for AI generation. Supports ${placeholder}, ${contextBefore}, ${contextAfter}, ${suggestionCount}, ${avoidSuggestions}, ${direction}, ${fileName}, ${languageId}."
-        },
-        "saurus.activation.modeOnEnter": {
-          "type": "string",
-          "default": "hybrid",
-          "enum": [
-            "hybrid",
-            "ai",
-            "thesaurus"
-          ],
-          "description": "Default suggestion mode when cursor enters/clicks into a placeholder. 'hybrid' shows both sources, 'ai' shows AI only, 'thesaurus' shows thesaurus only."
         },
         "saurus.suggestions.count": {
           "type": "number",
@@ -262,17 +191,6 @@
           "minimum": 2,
           "maximum": 20,
           "description": "Number of suggestion options to request."
-        },
-        "saurus.autoTrigger.onCursorEnter": {
-          "type": "boolean",
-          "default": true,
-          "description": "Auto-generate suggestions when cursor enters a placeholder."
-        },
-        "saurus.autoTrigger.debounceMs": {
-          "type": "number",
-          "default": 250,
-          "minimum": 50,
-          "description": "Debounce delay for auto-trigger behavior."
         },
         "saurus.context.charsBefore": {
           "type": "number",
@@ -307,33 +225,21 @@
         "mac": "cmd+shift+s",
         "linux": "ctrl+shift+s",
         "win": "ctrl+shift+s",
-        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
+        "when": "editorTextFocus && editorHasSelection"
       },
       {
         "command": "saurus.suggestForSelectionWithPrompt",
         "mac": "cmd+shift+x",
         "linux": "ctrl+shift+x",
         "win": "ctrl+shift+x",
-        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
+        "when": "editorTextFocus && editorHasSelection"
       },
       {
         "command": "saurus.findProblems",
         "mac": "cmd+shift+d",
         "linux": "ctrl+shift+d",
         "win": "ctrl+shift+d",
-        "when": "editorTextFocus && !suggestWidgetVisible"
-      },
-      {
-        "command": "saurus.showAiOnlySuggestions",
-        "mac": "cmd+shift+a",
-        "linux": "ctrl+shift+a",
-        "win": "ctrl+shift+a",
-        "when": "editorTextFocus && editorHasSelection && !suggestWidgetVisible"
-      },
-      {
-        "command": "saurus.exitPlaceholderSuggestions",
-        "key": "escape",
-        "when": "suggestWidgetVisible && editorTextFocus"
+        "when": "editorTextFocus"
       }
     ]
   },

@@ -18,7 +18,7 @@ import {
   CopilotChatConsentRequiredError,
   CopilotChatRequestError,
   CopilotChatUnavailableError,
-  createAiSuggestionProvider
+  createSuggestionProvider
 } from "../../../services/ai";
 import { ProblemIssue, SaurusSettings } from "../../../types";
 
@@ -355,7 +355,7 @@ export class ProblemFinderService implements vscode.Disposable {
           async (progress) => {
             progress.report({ message: "Diagnosing writing problems..." });
 
-            const provider = createAiSuggestionProvider(settings.aiProvider);
+            const provider = createSuggestionProvider(settings.aiProvider);
             const response = await provider.generateProblems({
               prompt,
               timeoutMs: settings.aiTimeoutMs,

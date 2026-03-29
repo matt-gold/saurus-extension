@@ -24,18 +24,17 @@
 </p>
 
 
-It highlights placeholders (`{{...}}`) in your text and provides replacement options on click. Thesaurus-first mode is available when enabled, and Saurus is designed to avoid AI-slop by targeting single words or short phrases.
+It highlights placeholders (`{{...}}`) in your text and provides replacement options on click. Saurus is designed to support targeted revision without turning your draft into AI-slop.
 
 ## Key Workflows
 
 These are the primary workflows:
 
 - As you write, leave placeholders and come back later, for example: `I came, I saw, I {{took over}}`. Placeholders are highlighted, and placing the cursor inside one opens the Saurus suggestions window.
+- Add inline prompt metadata when you want to steer a placeholder deliberately, for example: `{{took over :: more precise, less dramatic}}`.
 - `cmd+shift+s` / `ctrl+shift+s`: wrap selected text in delimiters and open suggestions
-- `cmd+shift+a` / `ctrl+shift+a`: AI-only suggestions for the current placeholder (also wraps selection if needed)
+- `cmd+shift+x` / `ctrl+shift+x`: wrap selected text and attach prompt metadata for a directed suggestion run
 - `cmd+shift+d` / `ctrl+shift+d`: diagnose writing problems in a selection or (with confirmation) the full file
-- `cmd+shift+z` / `ctrl+shift+z`: thesaurus-only suggestions for the current placeholder (also wraps selection if needed)
-- `Esc` (with suggest menu open): close suggestions and remove placeholder delimiters
 
 ## Features
 
@@ -44,7 +43,7 @@ These are the primary workflows:
 - Inline problem marking: underlines and hover details show severity, rationale, and concise fix hints exactly where problems appear.
 - Responsible AI controls: selection-first flow, explicit consent before full-file analysis, and no large-scale rewrite output in Diagnose.
 - Keyboard-native workflow: fast commands for suggest, diagnose, and iterate without leaving the editor.
-- Thesaurus mode backed by Merriam-Webster takes priority over AI suggestions when enabled (API key required, recommended).
+- Prompt-aware placeholders: embed `:: direction` directly in a placeholder and Saurus reuses that intent for future generation.
 - Flexible AI providers: `copilotChat` (native), `codex`, `copilot` (GitHub CLI), and `claude`.
 
 ## Diagnose Writing Problems
@@ -69,27 +68,13 @@ Use `Saurus: Diagnose Writing Problems` (`cmd+shift+d` / `ctrl+shift+d`) when yo
 
 ## Provider Setup
 
-### Thesaurus (Merriam-Webster)
-
-Optional feature (disabled by default, recommended for deterministic single-word alternatives). Enable it with:
-
-```json
-{
-  "saurus.thesaurus.enabled": true,
-  "saurus.thesaurus.provider": "merriamWebster"
-}
-```
-
-Then run `Saurus: Configure Thesaurus Provider` and enter your Merriam-Webster key. Saurus stores it in VS Code secure storage.
-
 ### AI Provider: Copilot Chat (Native, default)
 
 Recommended settings:
 
 ```json
 {
-  "saurus.ai.provider": "copilotChat",
-  "saurus.ai.autoGenerateOnOpen": false
+  "saurus.ai.provider": "copilotChat"
 }
 ```
 
@@ -125,8 +110,7 @@ Recommended settings:
 ```json
 {
   "saurus.ai.provider": "copilot",
-  "saurus.ai.path": "gh",
-  "saurus.ai.autoGenerateOnOpen": false
+  "saurus.ai.path": "gh"
 }
 ```
 
@@ -144,8 +128,7 @@ Recommended settings:
 {
   "saurus.ai.provider": "claude",
   "saurus.ai.path": "claude",
-  "saurus.ai.model": "sonnet",
-  "saurus.ai.autoGenerateOnOpen": false
+  "saurus.ai.model": "sonnet"
 }
 ```
 
@@ -179,22 +162,18 @@ This produces a `.vsix` you can install locally.
 2. Select a word or short phrase.
 3. Press `cmd+shift+s` / `ctrl+shift+s`.
 4. Pick a replacement from the popover.
-5. Use `cmd+shift+a` for AI-only or `cmd+shift+z` for thesaurus-only as needed.
-6. Use `↻ Generate more` to append more AI options.
-7. Use `↻ Generate w/ prompt` for a one-off directed AI run.
+5. Use `Saurus: Generate With Prompt` or `cmd+shift+x` to attach a reusable `:: direction` to the placeholder.
+6. Use `Generate More` to append more options.
 
 ## Commands
 
 - `Saurus: Generate Placeholder Suggestions` (`saurus.generateSuggestions`)
 - `Saurus: Suggest For Selected Text` (`saurus.suggestForSelection`)
+- `Saurus: Suggest For Selected Text (With Prompt)` (`saurus.suggestForSelectionWithPrompt`)
 - `Saurus: Get More AI Options` (`saurus.refreshSuggestions`)
 - `Saurus: Generate With Prompt` (`saurus.refreshSuggestionsWithPrompt`)
 - `Saurus: Diagnose Writing Problems` (`saurus.findProblems`)
-- `Saurus: Show AI Suggestions Only` (`saurus.showAiOnlySuggestions`)
-- `Saurus: Show Thesaurus Suggestions Only` (`saurus.showThesaurusOnlySuggestions`)
-- `Saurus: Exit Placeholder Suggestions` (`saurus.exitPlaceholderSuggestions`)
 - `Saurus: Clear Persistent Cache` (`saurus.clearPersistentCache`)
-- `Saurus: Disable Auto Trigger (Workspace)` (`saurus.disableAutoTriggerForWorkspace`)
 
 ## Settings
 
@@ -204,18 +183,11 @@ All settings are under `saurus.*`.
 - `saurus.languages`
 - `saurus.delimiters.open`
 - `saurus.delimiters.close`
-- `saurus.thesaurus.enabled`
-- `saurus.thesaurus.provider`
-- `saurus.thesaurus.timeoutMs`
-- `saurus.thesaurus.maxSuggestions` (default `20`)
-- `saurus.ai.autoGenerateOnOpen`
 - `saurus.ai.provider` (`copilotChat` | `codex` | `copilot` | `claude`)
 - `saurus.ai.path` (optional; ignored for `copilotChat`; defaults by provider: `""`, `codex`, `gh`, `claude`)
 - `saurus.ai.model` (optional)
 - `saurus.ai.reasoningEffort`
 - `saurus.ai.timeoutMs`
-- `saurus.menu.thesaurusPrefix`
-- `saurus.menu.aiPrefix`
 - `saurus.cache.persistAcrossReload`
 - `saurus.cache.persistTtlDays`
 - `saurus.placeholderHighlight.enabled`
@@ -224,10 +196,7 @@ All settings are under `saurus.*`.
 - `saurus.placeholderHighlight.delimiterColor`
 - `saurus.placeholderHighlight.textColor`
 - `saurus.prompt.template`
-- `saurus.activation.modeOnEnter` (`hybrid` | `ai` | `thesaurus`, default `hybrid`)
 - `saurus.suggestions.count`
-- `saurus.autoTrigger.onCursorEnter`
-- `saurus.autoTrigger.debounceMs`
 - `saurus.context.charsBefore`
 - `saurus.context.charsAfter`
 - `saurus.problemFinder.prompt.template`
@@ -239,15 +208,10 @@ Example workspace settings:
 {
   "saurus.delimiters.open": "[[",
   "saurus.delimiters.close": "]]",
-  "saurus.thesaurus.enabled": false,
-  "saurus.ai.autoGenerateOnOpen": false,
   "saurus.ai.provider": "copilotChat",
   "saurus.ai.model": "",
   "saurus.ai.reasoningEffort": "low",
   "saurus.ai.timeoutMs": 20000,
-  "saurus.activation.modeOnEnter": "hybrid",
-  "saurus.menu.thesaurusPrefix": "📖",
-  "saurus.menu.aiPrefix": "✨",
   "saurus.cache.persistAcrossReload": false,
   "saurus.cache.persistTtlDays": 7,
   "saurus.suggestions.count": 10,
@@ -272,7 +236,6 @@ Example workspace settings:
 - `No Copilot Chat models are available`: sign in to Copilot Chat in VS Code or switch to a CLI provider.
 - `AI CLI was not found`: set `saurus.ai.path` or install the selected CLI provider.
 - `AI CLI is not logged in`: log in for your selected CLI provider (Codex: `codex login`; Copilot via `gh`: `gh auth login`; Claude: run `claude` and complete login or set `ANTHROPIC_API_KEY`).
-- `Merriam-Webster thesaurus API key is missing`: run `Saurus: Configure Thesaurus Provider` and store your key in secure storage.
 - No new results on refresh: adjust prompt template or context window.
 
 ## Performance Tips

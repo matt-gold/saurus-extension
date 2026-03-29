@@ -56,7 +56,29 @@ test("manifest contributes problem finder keybinding", () => {
   assert.equal(keybinding.mac, "cmd+shift+d");
   assert.equal(keybinding.linux, "ctrl+shift+d");
   assert.equal(keybinding.win, "ctrl+shift+d");
-  assert.equal(keybinding.when, "editorTextFocus && !suggestWidgetVisible");
+  assert.equal(keybinding.when, "editorTextFocus");
+});
+
+test("manifest removes legacy completion-menu commands and settings", () => {
+  const manifest = readManifest();
+  const commandIds = new Set(manifest.contributes.commands.map((entry) => entry.command));
+  const properties = manifest.contributes.configuration.properties;
+
+  assert.equal(commandIds.has("saurus.showAiOnlySuggestions"), false);
+  assert.equal(commandIds.has("saurus.showThesaurusOnlySuggestions"), false);
+  assert.equal(commandIds.has("saurus.exitPlaceholderSuggestions"), false);
+  assert.equal(commandIds.has("saurus.configureThesaurusProvider"), false);
+
+  assert.equal(Object.hasOwn(properties, "saurus.autoTrigger.onCursorEnter"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.autoTrigger.debounceMs"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.activation.modeOnEnter"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.ai.autoGenerateOnOpen"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.menu.thesaurusPrefix"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.menu.aiPrefix"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.thesaurus.enabled"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.thesaurus.provider"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.thesaurus.timeoutMs"), false);
+  assert.equal(Object.hasOwn(properties, "saurus.thesaurus.maxSuggestions"), false);
 });
 
 test("manifest contributes problem finder settings defaults", () => {
@@ -75,4 +97,15 @@ test("manifest contributes problem finder settings defaults", () => {
   assert.equal(maxIssues.default, 12);
   assert.equal(maxIssues.minimum, 1);
   assert.equal(maxIssues.maximum, 20);
+});
+
+test("manifest contributes remove-all-delimiters command", () => {
+  const manifest = readManifest();
+  assert.ok(manifest.activationEvents.includes("onCommand:saurus.removeAllPlaceholderDelimiters"));
+
+  const command = manifest.contributes.commands.find(
+    (entry) => entry.command === "saurus.removeAllPlaceholderDelimiters"
+  );
+  assert.ok(command);
+  assert.equal(command.title, "Saurus: Remove All Placeholder Delimiters");
 });

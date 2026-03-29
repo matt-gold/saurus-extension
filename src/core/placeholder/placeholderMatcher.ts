@@ -30,18 +30,25 @@ export function findAllPlaceholdersInLine(
       break;
     }
 
-    const closeIndex = lineText.indexOf(close, openIndex + open.length);
+    const contentStart = openIndex + open.length;
+    const closeIndex = lineText.indexOf(close, contentStart);
     if (closeIndex === -1) {
       break;
+    }
+
+    const nestedOpenIndex = lineText.indexOf(open, contentStart);
+    if (nestedOpenIndex !== -1 && nestedOpenIndex < closeIndex) {
+      searchFrom = nestedOpenIndex;
+      continue;
     }
 
     const end = closeIndex + close.length;
     matches.push({
       start: openIndex,
       end,
-      innerStart: openIndex + open.length,
+      innerStart: contentStart,
       innerEnd: closeIndex,
-      rawInnerText: lineText.slice(openIndex + open.length, closeIndex),
+      rawInnerText: lineText.slice(contentStart, closeIndex),
       rawFullText: lineText.slice(openIndex, end)
     });
 

@@ -14,12 +14,10 @@ import { SuggestionCacheEntry } from "../types";
 
 function buildEntry(overrides: Partial<SuggestionCacheEntry> = {}): SuggestionCacheEntry {
   return {
-    thesaurusOptions: ["one"],
-    aiOptions: ["two"],
-    thesaurusLastResponseCached: true,
-    aiLoadedCount: 1,
-    aiLastAddedCount: 1,
-    aiLastResponseCached: false,
+    suggestions: ["two"],
+    loadedCount: 1,
+    lastAddedCount: 1,
+    lastResponseCached: false,
     seenNormalized: new Set<string>(["two"]),
     seenRaw: ["two"],
     createdAt: 1000,
@@ -35,9 +33,8 @@ test("serialize/deserialize roundtrip keeps set contents", () => {
   const serialized = serializeEntry(entry);
   const hydrated = deserializeEntry(serialized);
 
-  assert.equal(hydrated.aiLoadedCount, 1);
-  assert.equal(hydrated.thesaurusLastResponseCached, true);
-  assert.equal(hydrated.aiLastResponseCached, false);
+  assert.equal(hydrated.loadedCount, 1);
+  assert.equal(hydrated.lastResponseCached, false);
   assert.deepEqual([...hydrated.seenNormalized], ["two"]);
   assert.deepEqual(hydrated.seenRaw, ["two"]);
 });
@@ -57,7 +54,7 @@ test("save/load persisted cache writes and reloads entries", async () => {
   const filePath = path.join(tempDir, "cache.json");
   const entries = new Map<string, SuggestionCacheEntry>();
   entries.set("file://a::1", buildEntry());
-  entries.set("file://a::2", buildEntry({ thesaurusOptions: [], aiOptions: [] }));
+  entries.set("file://a::2", buildEntry({ suggestions: [] }));
 
   await savePersistedCache(filePath, entries);
   const loaded = loadPersistedCache(filePath, 10_000, 2_000);

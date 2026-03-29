@@ -1,28 +1,20 @@
 import { hashText } from "./promptTemplate";
-import { extractThesaurusLookupTerm } from "./thesaurusLookupTerm";
-import { AiProviderKind, AiReasoningEffort, DelimiterPair, ThesaurusProviderKind } from "../../types";
+import { AiProviderKind, AiReasoningEffort, DelimiterPair } from "../../types";
 
-/** Describes ai semantic cache key input. */
-/** Describes ai semantic cache key input. */
-export type AiSemanticCacheKeyInput = {
-    placeholder: string;
-    contextBefore: string;
-    contextAfter: string;
-    aiProvider: AiProviderKind;
-    aiPath: string;
-    aiModel?: string;
-    aiReasoningEffort: AiReasoningEffort;
-    promptTemplateHash: string;
+/** Describes suggestion semantic cache key input. */
+export type SuggestionSemanticCacheKeyInput = {
+  placeholder: string;
+  direction: string;
+  contextBefore: string;
+  contextAfter: string;
+  aiProvider: AiProviderKind;
+  aiPath: string;
+  aiModel?: string;
+  aiReasoningEffort: AiReasoningEffort;
+  promptTemplateHash: string;
 };
 
-/** Describes thesaurus semantic cache key input. */
-/** Describes thesaurus semantic cache key input. */
-export type ThesaurusSemanticCacheKeyInput = {
-    provider: ThesaurusProviderKind;
-    rawPlaceholder: string;
-};
-
-/** Normalizes ai adjacent context. */
+/** Removes placeholder delimiters from nearby context while keeping the text itself. */
 export function normalizeAiAdjacentContext(text: string, delimiters: DelimiterPair): string {
   let normalized = text;
   if (delimiters.open.length > 0) {
@@ -34,10 +26,11 @@ export function normalizeAiAdjacentContext(text: string, delimiters: DelimiterPa
   return normalized;
 }
 
-/** Builds ai semantic cache key. */
-export function buildAiSemanticCacheKey(input: AiSemanticCacheKeyInput): string {
+/** Builds a semantic cache key for suggestion generation. */
+export function buildSuggestionSemanticCacheKey(input: SuggestionSemanticCacheKeyInput): string {
   const payload = JSON.stringify({
     placeholder: input.placeholder,
+    direction: input.direction,
     contextBefore: input.contextBefore,
     contextAfter: input.contextAfter,
     aiProvider: input.aiProvider,
@@ -47,15 +40,5 @@ export function buildAiSemanticCacheKey(input: AiSemanticCacheKeyInput): string 
     promptTemplateHash: input.promptTemplateHash
   });
 
-  return `ai::${hashText(payload)}`;
-}
-
-/** Builds thesaurus semantic cache key. */
-export function buildThesaurusSemanticCacheKey(input: ThesaurusSemanticCacheKeyInput): string {
-  const payload = JSON.stringify({
-    provider: input.provider,
-    term: extractThesaurusLookupTerm(input.rawPlaceholder).trim().toLowerCase()
-  });
-
-  return `thesaurus::${hashText(payload)}`;
+  return `suggestion::${hashText(payload)}`;
 }

@@ -1,1 +1,0 @@
-export { SaurusCompletionProvider } from "./SaurusCompletionProvider";

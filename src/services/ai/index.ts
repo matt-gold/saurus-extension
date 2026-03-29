@@ -1,11 +1,11 @@
 export {
-  createAiSuggestionProvider
-} from "./aiSuggestionProvider";
+  createSuggestionProvider
+} from "./suggestionProvider";
 export type {
   AiProviderBackgroundCheckOptions,
-  AiProviderGenerateRequest,
-  AiSuggestionProvider
-} from "./aiSuggestionProvider";
+  SuggestionProviderGenerateRequest,
+  SuggestionProvider
+} from "./suggestionProvider";
 
 export {
   AiModelDiscoveryError,

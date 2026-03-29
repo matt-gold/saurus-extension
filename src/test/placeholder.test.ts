@@ -51,3 +51,20 @@ test("findAllPlaceholdersInLine returns multiple placeholders in order", () => {
   assert.equal(matches[0].rawInnerText, "first");
   assert.equal(matches[1].rawInnerText, "second");
 });
+
+test("nested opening delimiter invalidates the earlier placeholder start", () => {
+  const line = "A {{first {{second}} token.";
+  const matches = findAllPlaceholdersInLine(line, "{{", "}}");
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].rawInnerText, "second");
+  assert.equal(matches[0].rawFullText, "{{second}}");
+});
+
+test("cursor inside abandoned outer placeholder returns no match before nested start", () => {
+  const line = "A {{first {{second}} token.";
+  const cursor = line.indexOf("first") + 1;
+  const match = findPlaceholderInLine(line, cursor, "{{", "}}");
+
+  assert.equal(match, undefined);
+});

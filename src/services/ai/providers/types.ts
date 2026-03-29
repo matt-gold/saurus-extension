@@ -31,8 +31,8 @@ export type AiProviderBackgroundCheckOptions = {
   model?: string;
 };
 
-/** Normalized AI generation request shape used by provider implementations. */
-export type AiProviderGenerateRequest = {
+/** Normalized suggestion-generation request shape used by provider implementations. */
+export type SuggestionProviderGenerateRequest = {
   prompt: string;
   timeoutMs: number;
   model?: string;
@@ -43,12 +43,12 @@ export type AiProviderGenerateRequest = {
   userInitiated: boolean;
 };
 
-/** Runtime behavior implemented by an AI provider. */
-export type AiSuggestionProvider<K extends string = string> = {
+/** Runtime behavior implemented by a suggestion provider. */
+export type SuggestionProvider<K extends string = string> = {
   readonly kind: K;
   canGenerateInBackground: (options: AiProviderBackgroundCheckOptions) => Promise<boolean>;
-  generate: (request: AiProviderGenerateRequest) => Promise<SuggestionResponse>;
-  generateProblems: (request: AiProviderGenerateRequest) => Promise<ProblemFinderResponse>;
+  generate: (request: SuggestionProviderGenerateRequest) => Promise<SuggestionResponse>;
+  generateProblems: (request: SuggestionProviderGenerateRequest) => Promise<ProblemFinderResponse>;
 };
 
 /** Unified definition for one AI provider (metadata + model discovery + runtime behavior). */
@@ -58,7 +58,7 @@ export type AiProviderDefinition<K extends string = string> = {
   preset: AiProviderPreset<K>;
   isDefault?: boolean;
   isCli: boolean;
-  runtime: AiSuggestionProvider<K>;
+  runtime: SuggestionProvider<K>;
   discoverModels: (options: AiProviderModelDiscoveryOptions) => Promise<AiProviderModelDiscoveryResult>;
   getCliModelDiscoveryCommand?: (aiPath: string) => CliModelDiscoveryCommand;
   cliImplementation?: CliAiProviderImplementation<K>;
