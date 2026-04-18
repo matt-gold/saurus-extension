@@ -247,6 +247,17 @@ export function registerSaurusCommands(
       }
 
       moveSelectionToCommandTarget(editor, uri, line, character);
+      const lookup = controller.getSuggestionActionLookup(editor.document, editor.selection.active);
+      if (lookup && !lookup.hasSuggestions && !lookup.isGenerating) {
+        const generationPromise = controller.generateForEditor(editor, {
+          forceDifferent: false,
+          showNoPlaceholderWarning: false,
+          userInitiated: true
+        });
+        await showQuickFixDuringGeneration(generationPromise);
+        return;
+      }
+
       await reopenQuickFix();
     })
   );

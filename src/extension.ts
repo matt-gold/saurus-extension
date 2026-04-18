@@ -12,6 +12,7 @@ import { registerConfigCommands } from "./commands/config";
 import { PlaceholderCodeLensProvider } from "./ui/codelens";
 import { SaurusCodeActionProvider } from "./ui/codeActions";
 import { PlaceholderHighlighter } from "./ui/highlight";
+import { PlaceholderHoverProvider } from "./ui/hover";
 
 const PERSISTED_CACHE_FILENAME = "saurus-cache-v1.json";
 
@@ -38,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const provider = new SaurusCodeActionProvider(controller);
   const codeLensProvider = new PlaceholderCodeLensProvider(controller);
+  const hoverProvider = new PlaceholderHoverProvider(controller);
   const highlighter = new PlaceholderHighlighter(controller);
   context.subscriptions.push(controller);
 
@@ -46,25 +48,6 @@ export function activate(context: vscode.ExtensionContext): void {
     { scheme: "untitled" }
   ];
 
-  async function openQuickFixForPlaceholderEntry(event: vscode.TextEditorSelectionChangeEvent): Promise<void> {
-    if (event.selections.length !== 1 || !event.kind || event.kind !== vscode.TextEditorSelectionChangeKind.Mouse) {
-      return;
-    }
-
-    const selection = event.selections[0];
-    if (!selection.isEmpty) {
-      return;
-    }
-
-    const document = event.textEditor.document;
-    const currentKey = controller.getSuggestionKeyAtPosition(document, selection.active);
-    if (!currentKey) {
-      return;
-    }
-
-    await controller.reopenQuickFix();
-  }
-
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider(selector, provider, {
       providedCodeActionKinds: SaurusCodeActionProvider.providedCodeActionKinds
@@ -72,6 +55,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(selector, codeLensProvider)
+  );
+  context.subscriptions.push(
+    vscode.languages.registerHoverProvider(selector, hoverProvider)
   );
   context.subscriptions.push(highlighter);
   registerSaurusCommands(controller, context.subscriptions);
@@ -117,12 +103,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
       controller.refreshProblemDecorationsForVisibleEditors();
       highlighter.refreshVisibleEditors();
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeTextEditorSelection((event) => {
-      void openQuickFixForPlaceholderEntry(event);
     })
   );
 
