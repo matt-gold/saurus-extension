@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+### Patch Changes
+
+- ed9e0ee: Refine placeholder interaction so Saurus no longer auto-opens during passive editing, and add placeholder hover actions for opening suggestions or generating with a prompt.
+
 ## 0.6.0
 
 ### Minor Changes
