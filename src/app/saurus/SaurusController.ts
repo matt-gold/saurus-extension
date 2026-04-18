@@ -129,28 +129,6 @@ export class SaurusController implements vscode.Disposable {
     };
   }
 
-  public maybeAutoGenerateSuggestions(document: vscode.TextDocument, position: vscode.Position): void {
-    const session = this.getSessionAtPosition(document, position);
-    if (!session || session.hasSuggestions || session.isGenerating || this.suggestionResultStore.hasInFlight(session.key)) {
-      return;
-    }
-
-    const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.uri.toString() !== document.uri.toString()) {
-      return;
-    }
-
-    const target = new vscode.Selection(position, position);
-    editor.selection = target;
-    void this.generateForEditor(editor, {
-      forceDifferent: false,
-      showNoPlaceholderWarning: false,
-      userInitiated: true
-    }).finally(() => {
-      void this.reopenQuickFix();
-    });
-  }
-
   public getSuggestionKeyAtPosition(document: vscode.TextDocument, position: vscode.Position): string | undefined {
     return this.getSessionAtPosition(document, position)?.key;
   }

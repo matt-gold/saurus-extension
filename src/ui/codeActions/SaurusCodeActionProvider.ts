@@ -13,14 +13,9 @@ export class SaurusCodeActionProvider implements vscode.CodeActionProvider {
     range: vscode.Range | vscode.Selection
   ): vscode.CodeAction[] {
     const position = range.start;
-    let lookup = this.controller.getSuggestionActionLookup(document, position);
+    const lookup = this.controller.getSuggestionActionLookup(document, position);
     if (!lookup) {
       return [];
-    }
-
-    if (!lookup.hasSuggestions && !lookup.isGenerating) {
-      this.controller.maybeAutoGenerateSuggestions(document, position);
-      lookup = this.controller.getSuggestionActionLookup(document, position) ?? lookup;
     }
 
     const codeActions = buildCodeActions(lookup);
